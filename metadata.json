@@ -1,0 +1,6 @@
+{
+  "name": "BG CLUB - Bốc Thăm Thi Đấu Mini Game",
+  "description": "Ứng dụng bốc thăm chia cặp xoay vòng cầu lông và thể thao thông minh, công bằng, tự động tính điểm và xếp hạng cho BG CLUB.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
