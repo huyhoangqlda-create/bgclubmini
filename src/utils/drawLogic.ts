@@ -25,18 +25,38 @@ export function getMinTurns(players: Player[], excludeId?: number): number {
   return present.length ? Math.min(...present.map((p) => p.turns)) : 0;
 }
 
+/**
+ * Quy tắc ghép cặp đôi theo yêu cầu:
+ * - Nam A với Nữ (A + N)
+ * - Nam B với Nữ (B + N)
+ * - Nữ với Nữ (N + N)
+ */
 export function isValidTeam(t: [Player, Player]): boolean {
   const a = t[0].g;
   const b = t[1].g;
-  // Two females on same team is invalid
-  if (a === 'N' && b === 'N') return false;
-  // If neither is female, they cannot be of the same level (must be A + B)
-  if (a !== 'N' && b !== 'N') return a !== b;
-  // One male and one female is valid
-  return true;
+  return (
+    (a === 'A' && b === 'N') ||
+    (a === 'N' && b === 'A') ||
+    (a === 'B' && b === 'N') ||
+    (a === 'N' && b === 'B') ||
+    (a === 'N' && b === 'N')
+  );
 }
 
 export const hasFemale = (t: [Player, Player]): boolean => t[0].g === 'N' || t[1].g === 'N';
+
+export function getTeamTypeLabel(p1?: Player, p2?: Player): string {
+  if (!p1 || !p2) return 'Chưa đủ người';
+  const a = p1.g;
+  const b = p2.g;
+  if ((a === 'A' && b === 'N') || (a === 'N' && b === 'A')) return 'Nam A + Nữ';
+  if ((a === 'B' && b === 'N') || (a === 'N' && b === 'B')) return 'Nam B + Nữ';
+  if (a === 'N' && b === 'N') return 'Nữ + Nữ';
+  if ((a === 'A' && b === 'B') || (a === 'B' && b === 'A')) return 'Nam A + B';
+  if (a === 'A' && b === 'A') return 'Nam A + A';
+  if (a === 'B' && b === 'B') return 'Nam B + B';
+  return `${a} + ${b}`;
+}
 
 export function getPairStats(history: HistoryMatch[], active: Record<number, ActiveMatch>) {
   const part: Record<string, number> = {};
@@ -73,18 +93,26 @@ export interface FindMatchResult {
   err?: string;
 }
 
+/**
+ * Thuật toán bốc thăm:
+ * - Chỉ tính những người đang chờ (idle players).
+ * - Không tính thời gian chờ (không dùng p.last).
+ * - Ưu tiên người có số lượt đã đánh (p.turns) ít nhất, bốc ngẫu nhiên công bằng giữa những người cùng số lượt.
+ * - Đảm bảo mỗi cặp là Nam A + Nữ, Nam B + Nữ hoặc Nữ + Nữ.
+ */
 export function findMatch(
   players: Player[],
   active: Record<number, ActiveMatch>,
   history: HistoryMatch[],
   sameType: boolean
 ): FindMatchResult {
+  // Chỉ tính những người đang chờ (không bận trên sân)
   const idle = getIdlePlayers(players, active);
-  
-  // Sort by least turns played, then longest wait time since last match, then random
+
+  // Chỉ sắp xếp theo số lượt đã đánh (turns) và ngẫu nhiên (r). KHÔNG tính thời gian chờ (bỏ p.last).
   const sorted = idle
     .map((p) => ({ p, r: Math.random() }))
-    .sort((x, y) => x.p.turns - y.p.turns || x.p.last - y.p.last || x.r - y.r)
+    .sort((x, y) => x.p.turns - y.p.turns || x.r - y.r)
     .slice(0, 32)
     .map((x) => x.p);
 
@@ -119,8 +147,9 @@ export function findMatch(
 
           if (!valid.length) continue;
 
-          // Check if same type matchup (both have N or neither has N)
-          const same = valid.filter(([a, b]) => hasFemale(a) === hasFemale(b));
+          // Cùng loại đối đầu (Đôi Nữ vs Đôi Nữ, hoặc Đôi Nam Nữ vs Đôi Nam Nữ)
+          const isFemalePair = (t: [Player, Player]) => t[0].g === 'N' && t[1].g === 'N';
+          const same = valid.filter(([a, b]) => isFemalePair(a) === isFemalePair(b));
           const cross = sameType && !same.length ? 1 : 0;
           const sumT = four[0].turns + four[1].turns + four[2].turns + four[3].turns;
           const rc = 2 ** i + 2 ** j + 2 ** k + 2 ** l;
@@ -146,7 +175,7 @@ export function findMatch(
     const counts = { A: 0, B: 0, N: 0 };
     sorted.forEach((p) => counts[p.g]++);
     return {
-      err: `Người đang chờ không ghép được trận hợp lệ (hiện có: ${counts.A} Nam A, ${counts.B} Nam B, ${counts.N} Nữ). Mỗi đội phải là (Nam A + Nam B) hoặc (Nam + Nữ).`,
+      err: `Người đang chờ không ghép được trận hợp lệ (hiện có: ${counts.A} Nam A, ${counts.B} Nam B, ${counts.N} Nữ). Mỗi cặp phải là: Nam A + Nữ, Nam B + Nữ, hoặc Nữ + Nữ. Cần có đủ người chơi Nữ để ghép cặp.`,
     };
   }
 
@@ -173,7 +202,7 @@ export function findMatch(
     pick = best.splits[0];
   }
 
-  // Randomly assign sides
+  // Randomize sides
   if (Math.random() < 0.5) {
     pick.reverse();
   }

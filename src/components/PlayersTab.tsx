@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, Sparkles, X, Check, EyeOff } from 'lucide-react';
+import { UserPlus, Sparkles, X, Edit2, Sliders } from 'lucide-react';
 import { Player, GroupType, GROUP_LABELS, ActiveMatch, HistoryMatch } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
 import { getBusySet } from '../utils/drawLogic.ts';
@@ -14,6 +14,7 @@ interface PlayersTabProps {
   onToggleAttendance: (id: number) => void;
   onChangePlayerGroup: (id: number, g: GroupType) => void;
   onDeletePlayer: (id: number) => void;
+  onEditPlayer: (player: Player) => void;
   onLoadSamplePlayers: () => void;
 }
 
@@ -27,6 +28,7 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
   onToggleAttendance,
   onChangePlayerGroup,
   onDeletePlayer,
+  onEditPlayer,
   onLoadSamplePlayers,
 }) => {
   const [namesText, setNamesText] = useState('');
@@ -162,7 +164,7 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
                     return (
                       <div
                         key={p.id}
-                        className={`flex items-center gap-3 p-3 transition-colors ${
+                        className={`flex items-center gap-2 sm:gap-3 p-3 transition-colors ${
                           p.on ? 'bg-white' : 'bg-[#faf9f6] opacity-75'
                         }`}
                       >
@@ -179,29 +181,27 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
                           </div>
                           <div className="text-[11px] text-[#5b6676] flex items-center gap-1 mt-0.5">
                             {isBusy && (
-                              <span className="text-[#2f8f5b] font-bold">🏓 Đang thi đấu · </span>
+                              <span className="text-[#2f8f5b] font-bold">🏓 Trên sân · </span>
                             )}
                             <span>{st.gp} trận</span>
                             <span>·</span>
                             <span className="font-semibold text-[#14233a]">{st.w}T</span>
                             <span>{st.l}B</span>
                             <span>·</span>
-                            <span>{p.turns} lượt</span>
+                            <span className="font-bold text-[#14233a]">{p.turns} lượt</span>
                           </div>
                         </div>
 
-                        {/* Reassign basket dropdown */}
-                        <select
-                          value={p.g}
-                          onChange={(e) => onChangePlayerGroup(p.id, e.target.value as GroupType)}
-                          disabled={isBusy}
-                          className="text-xs font-semibold py-1 px-1.5 rounded-lg border border-[#e3e0d8] bg-white text-[#14233a] focus:outline-none focus:border-[#c9a44c] shrink-0 disabled:opacity-50"
-                          aria-label="Đổi rổ"
+                        {/* Edit Player Button (Pencil) */}
+                        <button
+                          type="button"
+                          onClick={() => onEditPlayer(p)}
+                          className="w-8 h-8 rounded-lg hover:bg-[#eeece6] text-[#5b6676] hover:text-[#14233a] transition-colors flex items-center justify-center shrink-0"
+                          title="Sửa tên, rổ hoặc số lượt đánh"
+                          aria-label={`Chỉnh sửa ${p.name}`}
                         >
-                          <option value="A">Nam A</option>
-                          <option value="B">Nam B</option>
-                          <option value="N">Nữ</option>
-                        </select>
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
 
                         {/* Attendance Toggle switch */}
                         <button
@@ -240,7 +240,7 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
       </div>
 
       <div className="bg-[#f3f1ec] text-[12px] text-[#5b6676] p-2 leading-relaxed">
-        💡 <b>Mẹo:</b> Gạt công tắc sang xám khi thành viên tạm nghỉ giải lao hoặc về sớm — họ sẽ không bị bốc vào sân. Khi họ sẵn sàng chơi lại, chỉ cần bật xanh công tắc.
+        💡 <b>Chỉnh sửa thủ công:</b> Bấm vào biểu tượng bút chì ✏️ cạnh tên người chơi để đổi tên, đổi rổ hoặc tăng/giảm số lượt đã đánh (turns) thủ công theo ý bạn.
       </div>
     </div>
   );

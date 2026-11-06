@@ -1,5 +1,5 @@
 import React from 'react';
-import { History as HistoryIcon, Trash2 } from 'lucide-react';
+import { History as HistoryIcon, Trash2, Edit2 } from 'lucide-react';
 import { HistoryMatch, Player } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
 
@@ -7,12 +7,14 @@ interface HistoryTabProps {
   history: HistoryMatch[];
   players: Player[];
   onDeleteMatch: (id: number) => void;
+  onEditMatch: (match: HistoryMatch) => void;
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
   history,
   players,
   onDeleteMatch,
+  onEditMatch,
 }) => {
   const getPlayer = (id: number): Player | undefined => players.find((p) => p.id === id);
 
@@ -76,15 +78,26 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                 <span className="font-medium">
                   Trận {originalIndex + 1} · Sân {h.court + 1} · {formatTime(h.at)} – {formatTime(h.end)}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onDeleteMatch(h.id)}
-                  className="p-1 hover:bg-[#fbeceb] rounded-lg text-[#5b6676] hover:text-[#c2453b] transition-colors"
-                  aria-label="Xóa trận này"
-                  title="Xóa kết quả trận đấu"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onEditMatch(h)}
+                    className="p-1 hover:bg-[#eeece6] rounded-lg text-[#5b6676] hover:text-[#14233a] transition-colors"
+                    aria-label="Sửa trận này"
+                    title="Chỉnh sửa tỉ số hoặc người chơi"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteMatch(h.id)}
+                    className="p-1 hover:bg-[#fbeceb] rounded-lg text-[#5b6676] hover:text-[#c2453b] transition-colors"
+                    aria-label="Xóa trận này"
+                    title="Xóa kết quả trận đấu"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Matchup & Score */}

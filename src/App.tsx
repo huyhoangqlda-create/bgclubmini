@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { AppState, TabType, GroupType, Player, ActiveMatch } from './types.ts';
+import { AppState, TabType, GroupType, Player, ActiveMatch, HistoryMatch } from './types.ts';
 import { loadState, saveState, getFreshState, SAMPLE_PLAYERS } from './utils/storage.ts';
 import { findMatch, getPresentPlayers, getBusySet, getMinTurns } from './utils/drawLogic.ts';
 import { Header } from './components/Header.tsx';
@@ -17,6 +17,9 @@ import { HistoryTab } from './components/HistoryTab.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { ConfirmModal } from './components/ConfirmModal.tsx';
 import { Toast } from './components/Toast.tsx';
+import { ManualMatchModal } from './components/ManualMatchModal.tsx';
+import { EditPlayerModal } from './components/EditPlayerModal.tsx';
+import { EditHistoryModal } from './components/EditHistoryModal.tsx';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadState());
@@ -24,6 +27,32 @@ export default function App() {
   const [rollingNames, setRollingNames] = useState<Record<number, { t1: string[]; t2: string[] }>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Modals for manual editing
+  const [manualMatchModal, setManualMatchModal] = useState<{
+    isOpen: boolean;
+    courtIndex: number;
+    existingMatch?: ActiveMatch;
+  }>({
+    isOpen: false,
+    courtIndex: 0,
+  });
+
+  const [editPlayerModal, setEditPlayerModal] = useState<{
+    isOpen: boolean;
+    player: Player | null;
+  }>({
+    isOpen: false,
+    player: null,
+  });
+
+  const [editHistoryModal, setEditHistoryModal] = useState<{
+    isOpen: boolean;
+    match: HistoryMatch | null;
+  }>({
+    isOpen: false,
+    match: null,
+  });
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -45,7 +74,7 @@ export default function App() {
     saveState(state);
   }, [state]);
 
-  const showToast = (msg: string, duration = 2800) => {
+  const showToast = (msg: string, duration = 3000) => {
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
     }
@@ -144,13 +173,13 @@ export default function App() {
     }, 1100);
   };
 
-  // Draw for a single court
+  // Draw for a single court (only idle players, no wait time)
   const handleDrawCourt = (courtIdx: number) => {
     if (state.active[courtIdx] || rollingCourts.has(courtIdx)) return;
 
     const res = findMatch(state.players, state.active, state.history, state.sameType);
     if (res.err) {
-      showToast(res.err, 4000);
+      showToast(res.err, 4500);
       return;
     }
 
@@ -178,7 +207,6 @@ export default function App() {
       return;
     }
 
-    // Sequentially find matches taking previous temp active into account
     let tempActive = { ...state.active };
     let tempPlayers = [...state.players];
     let tempSeq = state.seq;
@@ -209,7 +237,7 @@ export default function App() {
     }
 
     if (!prepared.length) {
-      showToast('Không đủ người chơi hợp lệ để bốc thăm thêm sân.');
+      showToast('Không đủ người chơi hợp lệ để bốc thăm thêm sân (cần đủ người chơi Nữ).');
       return;
     }
 
@@ -218,6 +246,76 @@ export default function App() {
       prepared.map((p) => p.court),
       prepared
     );
+  };
+
+  // Manual Match Save (Create or Edit)
+  const handleManualSaveMatch = (
+    courtIndex: number,
+    t1: [number, number],
+    t2: [number, number],
+    isEdit: boolean
+  ) => {
+    setState((prev) => {
+      const nextActive = { ...prev.active };
+      const nextPlayers = [...prev.players];
+      let newSeq = prev.seq;
+
+      if (isEdit) {
+        const oldMatch = prev.active[courtIndex];
+        if (oldMatch) {
+          const oldIds = new Set([...oldMatch.t1, ...oldMatch.t2]);
+          const newIds = new Set([...t1, ...t2]);
+
+          // Refund turns for players removed from match
+          oldIds.forEach((pid) => {
+            if (!newIds.has(pid)) {
+              const p = nextPlayers.find((x) => x.id === pid);
+              if (p && p.turns > 0) p.turns--;
+            }
+          });
+
+          // Add turn for players newly added into match
+          newIds.forEach((pid) => {
+            if (!oldIds.has(pid)) {
+              const p = nextPlayers.find((x) => x.id === pid);
+              if (p) p.turns++;
+            }
+          });
+
+          nextActive[courtIndex] = {
+            ...oldMatch,
+            t1,
+            t2,
+          };
+        }
+      } else {
+        // Create brand new match manually
+        newSeq++;
+        nextActive[courtIndex] = {
+          id: newSeq,
+          court: courtIndex,
+          t1,
+          t2,
+          at: Date.now(),
+          d1: '',
+          d2: '',
+        };
+
+        [...t1, ...t2].forEach((pid) => {
+          const p = nextPlayers.find((x) => x.id === pid);
+          if (p) p.turns++;
+        });
+      }
+
+      return {
+        ...prev,
+        seq: newSeq,
+        active: nextActive,
+        players: nextPlayers,
+      };
+    });
+
+    showToast(isEdit ? `Đã cập nhật người chơi Sân ${courtIndex + 1}!` : `Đã ghép Sân ${courtIndex + 1} thành công!`);
   };
 
   const handleScoreChange = (courtIdx: number, team: 1 | 2, val: string) => {
@@ -304,7 +402,6 @@ export default function App() {
       };
     });
 
-    // Celebratory confetti animation
     try {
       confetti({
         particleCount: 50,
@@ -508,6 +605,14 @@ export default function App() {
     });
   };
 
+  const handleSaveEditPlayer = (updatedPlayer: Player) => {
+    setState((prev) => ({
+      ...prev,
+      players: prev.players.map((p) => (p.id === updatedPlayer.id ? updatedPlayer : p)),
+    }));
+    showToast(`Đã cập nhật thông tin của ${updatedPlayer.name}!`);
+  };
+
   const handleDeleteMatch = (matchId: number) => {
     setConfirmModal({
       isOpen: true,
@@ -523,6 +628,14 @@ export default function App() {
         showToast('Đã xóa trận đấu.');
       },
     });
+  };
+
+  const handleSaveEditHistory = (updatedMatch: HistoryMatch) => {
+    setState((prev) => ({
+      ...prev,
+      history: prev.history.map((h) => (h.id === updatedMatch.id ? updatedMatch : h)),
+    }));
+    showToast('Đã cập nhật kết quả và tính toán lại bảng xếp hạng!');
   };
 
   const handleNewSession = () => {
@@ -611,6 +724,19 @@ export default function App() {
             onQuickScore={handleQuickScore}
             onFinishMatch={handleFinishMatch}
             onCancelMatch={handleCancelMatch}
+            onManualMatch={(courtIdx) =>
+              setManualMatchModal({
+                isOpen: true,
+                courtIndex: courtIdx,
+              })
+            }
+            onEditActiveMatch={(courtIdx) =>
+              setManualMatchModal({
+                isOpen: true,
+                courtIndex: courtIdx,
+                existingMatch: state.active[courtIdx],
+              })
+            }
             onNavigateToPlayers={() => setState((s) => ({ ...s, tab: 'players' }))}
             onLoadSamplePlayers={handleLoadSamplePlayers}
           />
@@ -627,6 +753,7 @@ export default function App() {
             onToggleAttendance={handleToggleAttendance}
             onChangePlayerGroup={handleChangePlayerGroup}
             onDeletePlayer={handleDeletePlayer}
+            onEditPlayer={(p) => setEditPlayerModal({ isOpen: true, player: p })}
             onLoadSamplePlayers={handleLoadSamplePlayers}
           />
         )}
@@ -646,6 +773,7 @@ export default function App() {
             history={state.history}
             players={state.players}
             onDeleteMatch={handleDeleteMatch}
+            onEditMatch={(m) => setEditHistoryModal({ isOpen: true, match: m })}
           />
         )}
       </main>
@@ -659,6 +787,34 @@ export default function App() {
         }}
         activeMatchCount={Object.keys(state.active).length}
         playerCount={getPresentPlayers(state.players).length}
+      />
+
+      {/* Manual Match Creation / Edit Active Match Modal */}
+      <ManualMatchModal
+        isOpen={manualMatchModal.isOpen}
+        courtIndex={manualMatchModal.courtIndex}
+        existingMatch={manualMatchModal.existingMatch}
+        players={state.players}
+        activeMatches={state.active}
+        onClose={() => setManualMatchModal((m) => ({ ...m, isOpen: false, existingMatch: undefined }))}
+        onSave={handleManualSaveMatch}
+      />
+
+      {/* Manual Edit Player Modal */}
+      <EditPlayerModal
+        isOpen={editPlayerModal.isOpen}
+        player={editPlayerModal.player}
+        onClose={() => setEditPlayerModal({ isOpen: false, player: null })}
+        onSave={handleSaveEditPlayer}
+      />
+
+      {/* Manual Edit History Match Modal */}
+      <EditHistoryModal
+        isOpen={editHistoryModal.isOpen}
+        match={editHistoryModal.match}
+        players={state.players}
+        onClose={() => setEditHistoryModal({ isOpen: false, match: null })}
+        onSave={handleSaveEditHistory}
       />
 
       {/* Settings Modal */}

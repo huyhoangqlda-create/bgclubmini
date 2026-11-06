@@ -221,16 +221,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {showRules && (
               <div className="pt-2 text-xs text-[#5b6676] space-y-2 border-t border-[#e3e0d8] leading-relaxed">
                 <p>
-                  • <b>Ghép cặp:</b> 3 rổ thăm (Nam A, Nam B, Nữ). Mỗi đội trên sân gồm <b>Nam A + Nam B</b> hoặc <b>Nam + Nữ</b>. Không ghép 2 Nữ cùng đội hoặc 2 Nam cùng trình độ.
+                  • <b>Ghép cặp đôi:</b> 3 rổ thăm (Nam A, Nam B, Nữ). Mỗi cặp đấu gồm <b>Nam A + Nữ</b>, <b>Nam B + Nữ</b>, hoặc <b>Nữ + Nữ</b>.
                 </p>
                 <p>
-                  • <b>Ưu tiên xoay vòng:</b> Thành viên có số lượt ra sân ít nhất sẽ được ưu tiên bốc trước. Khi tất cả thành viên có mặt đã ra sân cùng số lượt, hệ thống tự động nhảy sang lượt mới.
+                  • <b>Xoay vòng lượt chơi:</b> Chỉ tính những người đang chờ, không tính thời gian chờ; ưu tiên người có số lượt ra sân ít nhất để đảm bảo cơ hội ra sân công bằng cho mọi thành viên.
                 </p>
                 <p>
-                  • <b>Hạn chế trùng lặp:</b> Thuật toán tự động tính điểm phạt để hạn chế tối đa việc chung đội hoặc đối đầu với cùng 1 người nhiều lần liên tiếp.
+                  • <b>Chỉnh sửa thủ công:</b> Người quản lý có thể tự do bấm nút <b>Ghép thủ công</b> trên sân trống, <b>Sửa / Đổi người</b> trên sân đang đấu, hoặc chỉnh sửa số lượt / đổi tên người chơi bất cứ khi nào cần.
                 </p>
                 <p>
-                  • <b>Chạm 15 điểm:</b> Mỗi trận kết thúc khi một đội chạm 15 điểm (hoặc số điểm quy ước).
+                  • <b>Hạn chế trùng lặp:</b> Thuật toán tự động tính điểm phạt để giảm tối đa việc chung đội hoặc đối đầu với cùng 1 người nhiều lần liên tiếp.
+                </p>
+                <p>
+                  • <b>Chạm 15 điểm:</b> Mỗi trận kết thúc khi một đội chạm 15 điểm.
                 </p>
               </div>
             )}

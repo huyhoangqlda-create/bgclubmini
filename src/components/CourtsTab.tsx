@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Dices, AlertTriangle, Clock, Trophy, CheckCircle2, RotateCcw } from 'lucide-react';
+import { Sparkles, Dices, AlertTriangle, Clock, Trophy, CheckCircle2, RotateCcw, Edit3, UserCheck } from 'lucide-react';
 import { Player, ActiveMatch, HistoryMatch } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
-import { getPresentPlayers, getIdlePlayers, getMinTurns } from '../utils/drawLogic.ts';
+import { getPresentPlayers, getIdlePlayers, getMinTurns, getTeamTypeLabel } from '../utils/drawLogic.ts';
 
 interface CourtsTabProps {
   courts: number;
@@ -18,6 +18,8 @@ interface CourtsTabProps {
   onQuickScore: (courtIndex: number, team: 1 | 2) => void;
   onFinishMatch: (courtIndex: number) => void;
   onCancelMatch: (courtIndex: number) => void;
+  onManualMatch: (courtIndex: number) => void;
+  onEditActiveMatch: (courtIndex: number) => void;
   onNavigateToPlayers: () => void;
   onLoadSamplePlayers: () => void;
 }
@@ -35,6 +37,8 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
   onQuickScore,
   onFinishMatch,
   onCancelMatch,
+  onManualMatch,
+  onEditActiveMatch,
   onNavigateToPlayers,
   onLoadSamplePlayers,
 }) => {
@@ -50,13 +54,6 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
   const formatElapsed = (startTime: number): string => {
     const mins = Math.floor((Date.now() - startTime) / 60000);
     return mins < 1 ? 'vừa bắt đầu' : `${mins} phút`;
-  };
-
-  const getTeamType = (ids: [number, number]): string => {
-    const p1 = getPlayer(ids[0]);
-    const p2 = getPlayer(ids[1]);
-    if (p1?.g === 'N' || p2?.g === 'N') return 'Nam + Nữ';
-    return 'A + B';
   };
 
   const present = getPresentPlayers(players);
@@ -76,7 +73,7 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
           <div>
             <h3 className="font-bold text-lg text-[#14233a]">Chưa đủ người để bốc thăm</h3>
             <p className="text-sm text-[#5b6676] max-w-md mx-auto mt-1 leading-relaxed">
-              Giải đấu cần ít nhất 4 người chơi có mặt thuộc 3 rổ: <b>Nam A</b>, <b>Nam B</b> và <b>Nữ</b> để bắt đầu ghép cặp thi đấu.
+              Quy tắc bốc cặp: <b>Nam A + Nữ</b>, <b>Nam B + Nữ</b> hoặc <b>Nữ + Nữ</b>. Cần tối thiểu 4 người có mặt để bắt đầu.
             </p>
           </div>
 
@@ -106,16 +103,16 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
             Thể lệ bốc thăm mini game
           </div>
           <p>
-            <b>1. Ghép cặp công bằng:</b> Chia người chơi làm 3 rổ thăm (Nam A, Nam B, Nữ). Mỗi đội trên sân gồm <b>Nam A + Nam B</b> hoặc <b>Nam + Nữ</b>.
+            <b>1. Ghép cặp đôi:</b> Mỗi cặp đấu hợp lệ là <b>Nam A + Nữ</b>, <b>Nam B + Nữ</b>, hoặc <b>Nữ + Nữ</b>.
           </p>
           <p>
-            <b>2. Xoay vòng lượt chơi:</b> Ưu tiên người đang chờ ở ngoài; bốc xoay vòng đến khi tất cả thành viên đều được ra sân rồi mới chuyển sang lượt mới. Trận chạm 15 điểm.
+            <b>2. Xoay vòng lượt chơi:</b> Chỉ tính những người đang chờ, không tính thời gian chờ; ưu tiên người có số lượt ra sân ít nhất.
           </p>
           <p>
-            <b>3. Tự động tính điểm:</b> Hệ thống tự tính số trận thắng, thua, hiệu số điểm và xếp hạng trực tiếp.
+            <b>3. Chỉnh sửa thủ công:</b> Cho phép tùy chỉnh ghép cặp thủ công hoặc đổi người trên sân bất kỳ lúc nào.
           </p>
           <p>
-            <b>4. Thành viên đến muộn:</b> Được thêm vào và tự động ưu tiên bốc ngay ở lượt kế tiếp!
+            <b>4. Tự động tính điểm:</b> Hệ thống tự tổng hợp thắng/thua, hiệu số và hỗ trợ gửi bảng xếp hạng Zalo 1 chạm.
           </p>
         </div>
       </div>
@@ -128,17 +125,19 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Batch Draw Button if multiple courts are free */}
-      {freeCourtIndices.length > 1 && idle.length >= 4 && (
-        <button
-          type="button"
-          onClick={onDrawAllFree}
-          className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-[#c9a44c] hover:bg-[#b8933b] text-[#14233a] shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
-        >
-          <Dices className="w-5 h-5 text-[#14233a]" />
-          Bốc thăm {freeCourtIndices.length} sân trống cùng lúc
-        </button>
-      )}
+      {/* Top action bar: Draw all free or Manual match */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        {freeCourtIndices.length > 1 && idle.length >= 4 && (
+          <button
+            type="button"
+            onClick={onDrawAllFree}
+            className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-[#c9a44c] hover:bg-[#b8933b] text-[#14233a] shadow-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+          >
+            <Dices className="w-5 h-5 text-[#14233a]" />
+            Bốc thăm {freeCourtIndices.length} sân trống cùng lúc
+          </button>
+        )}
+      </div>
 
       {/* Courts list */}
       <div className="space-y-3">
@@ -162,18 +161,30 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
                   </span>
                 </div>
 
-                <div className="py-4 text-center text-[#5b6676] text-sm font-medium">
+                <div className="py-3 text-center text-[#5b6676] text-sm font-medium">
                   Sân đang chờ thi đấu
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => onDrawCourt(courtIdx)}
-                  className="w-full py-2.5 px-4 rounded-xl font-bold text-sm bg-[#14233a] hover:bg-[#1f3a5f] text-white flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Dices className="w-4 h-4 text-[#c9a44c]" />
-                  Bốc thăm Sân {courtIdx + 1}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onDrawCourt(courtIdx)}
+                    className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm bg-[#14233a] hover:bg-[#1f3a5f] text-white flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Dices className="w-4 h-4 text-[#c9a44c]" />
+                    Bốc thăm Sân {courtIdx + 1}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onManualMatch(courtIdx)}
+                    className="py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm bg-white hover:bg-[#faf9f6] border border-[#e3e0d8] text-[#14233a] flex items-center justify-center gap-1.5 transition-colors"
+                    title="Tự chọn 4 người chơi vào sân"
+                  >
+                    <Edit3 className="w-4 h-4 text-[#5b6676]" />
+                    Ghép thủ công
+                  </button>
+                </div>
               </div>
             );
           }
@@ -186,6 +197,9 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
 
           const rollData = rollingNames[courtIdx];
 
+          const t1Label = getTeamTypeLabel(p1, p2);
+          const t2Label = getTeamTypeLabel(p3, p4);
+
           return (
             <div
               key={courtIdx}
@@ -194,9 +208,23 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-extrabold tracking-wider text-[#14233a] text-sm">
-                  SÂN {courtIdx + 1}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold tracking-wider text-[#14233a] text-sm">
+                    SÂN {courtIdx + 1}
+                  </span>
+                  {!isRolling && (
+                    <button
+                      type="button"
+                      onClick={() => onEditActiveMatch(courtIdx)}
+                      className="text-[11px] font-bold text-[#5b6676] hover:text-[#14233a] bg-[#eeece6] hover:bg-[#e3e0d8] px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors"
+                      title="Chỉnh sửa hoặc đổi người chơi trên sân"
+                    >
+                      <Edit3 className="w-3 h-3 text-[#c9a44c]" />
+                      Sửa / Đổi người
+                    </button>
+                  )}
+                </div>
+
                 <span
                   className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
                     isRolling
@@ -223,7 +251,7 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
                 {/* Team 1 */}
                 <div className="bg-[#f7f6f2] rounded-xl p-2.5 flex flex-col gap-2 min-w-0">
                   <span className="text-[10px] text-[#5b6676] font-bold uppercase tracking-wider">
-                    Đội 1 · {getTeamType(match.t1)}
+                    Đội 1 · {t1Label}
                   </span>
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -249,7 +277,7 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
                 {/* Team 2 */}
                 <div className="bg-[#f7f6f2] rounded-xl p-2.5 flex flex-col gap-2 min-w-0">
                   <span className="text-[10px] text-[#5b6676] font-bold uppercase tracking-wider">
-                    Đội 2 · {getTeamType(match.t2)}
+                    Đội 2 · {t2Label}
                   </span>
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -365,7 +393,7 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
             <div className="flex flex-wrap gap-1.5">
               {idle
                 .slice()
-                .sort((a, b) => a.turns - b.turns || a.last - b.last)
+                .sort((a, b) => a.turns - b.turns || a.name.localeCompare(b.name, 'vi'))
                 .map((p) => {
                   const isPriority = p.turns === minTurns;
                   return (
@@ -389,14 +417,14 @@ export const CourtsTab: React.FC<CourtsTabProps> = ({
 
             <p className="text-[12px] text-[#5b6676] px-1 leading-relaxed">
               <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-[#c9a44c] mr-1 align-middle"></span>
-              <b>Viền vàng:</b> chưa ra sân ở lượt hiện tại, được ưu tiên bốc trước. Khi tất cả đã ra sân đủ lượt, app tự động sang lượt tiếp theo.
+              <b>Viền vàng:</b> chưa ra sân ở lượt hiện tại, được ưu tiên bốc trước. Hệ thống chỉ bốc những người đang chờ và không tính thời gian chờ.
             </p>
 
-            {genderCounts.N === 1 && sameType && (
+            {genderCounts.N === 0 && (
               <div className="bg-[#fff6e0] text-[#7a5a12] rounded-xl p-2.5 text-xs flex items-start gap-2 leading-relaxed">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-[#c9a44c] mt-0.5" />
                 <span>
-                  Chỉ có 1 Nữ có mặt: cô ấy sẽ được ghép thành đội (Nam + Nữ) gặp đội (Nam A + Nam B) khi tới lượt ưu tiên.
+                  Hiện không có người chơi <b>Nữ</b> nào trong hàng chờ. Quy tắc yêu cầu mỗi cặp có Nữ (Nam A + Nữ, Nam B + Nữ, Nữ + Nữ). Bạn có thể bấm <b>Ghép thủ công</b> trên sân để ghép tùy ý!
                 </span>
               </div>
             )}
