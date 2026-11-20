@@ -1,9 +1,19 @@
-export type GroupType = 'A' | 'B' | 'N';
+export type BasketGender = 'male' | 'female';
+
+export type GroupType = string;
+
+export interface Basket {
+  id: string;
+  name: string;
+  shortLabel: string;
+  gender: BasketGender;
+  color: string;
+}
 
 export interface Player {
   id: number;
   name: string;
-  g: GroupType; // 'A' = Nam A, 'B' = Nam B, 'N' = Nữ
+  g: GroupType; // Basket id, e.g., 'A', 'B', 'N', or custom basket id
   on: boolean;  // Có mặt hay vắng mặt/nghỉ
   turns: number; // Số lượt đã ra sân
   last: number;  // Timestamp trận đấu gần nhất kết thúc
@@ -35,6 +45,8 @@ export interface HistoryMatch {
 export type TabType = 'courts' | 'players' | 'rank' | 'history';
 
 export interface AppState {
+  baskets: Basket[];
+  validPairs: string[]; // Canonical pair keys e.g. 'A|A', 'A|B', 'A|N'
   players: Player[];
   courts: number;
   active: Record<number, ActiveMatch>;
@@ -53,14 +65,17 @@ export interface PlayerStats {
   pa: number; // Points against (bị ghi)
 }
 
-export const GROUP_LABELS: Record<GroupType, string> = {
-  A: 'Nam A',
-  B: 'Nam B',
-  N: 'Nữ',
-};
+export const DEFAULT_BASKETS: Basket[] = [
+  { id: 'A', name: 'Nam A', shortLabel: 'A', gender: 'male', color: '#1f3a5f' },
+  { id: 'B', name: 'Nam B', shortLabel: 'B', gender: 'male', color: '#3f7ab8' },
+  { id: 'N', name: 'Nữ', shortLabel: 'Nữ', gender: 'female', color: '#c0567a' },
+];
 
-export const GROUP_ORDER: Record<GroupType, number> = {
-  A: 0,
-  B: 1,
-  N: 2,
-};
+export const DEFAULT_VALID_PAIRS: string[] = [
+  'A|A',
+  'A|B',
+  'A|N',
+  'B|B',
+  'B|N',
+  'N|N',
+];

@@ -1,15 +1,41 @@
 import React, { useState } from 'react';
-import { X, Globe, BookOpen, RotateCcw, Trash2, Download, Upload, Check, ChevronDown, ChevronUp } from 'lucide-react';
-import { AppState } from '../types.ts';
+import {
+  X,
+  Globe,
+  BookOpen,
+  RotateCcw,
+  Trash2,
+  Download,
+  Upload,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Layers,
+  Users,
+  Edit2,
+  AlertCircle,
+} from 'lucide-react';
+import { AppState, Basket, BasketGender } from '../types.ts';
+import { GroupBadge } from './GroupBadge.tsx';
+import { getAllPossiblePairs, getPairKey } from '../utils/drawLogic.ts';
+import { normalizeState } from '../utils/storage.ts';
 
 interface SettingsModalProps {
   isOpen: boolean;
   courts: number;
   sameType: boolean;
+  baskets: Basket[];
+  validPairs: string[];
   state: AppState;
   onClose: () => void;
   onCourtsChange: (courts: number) => void;
   onToggleSameType: () => void;
+  onAddBasket: (name: string, gender: BasketGender) => void;
+  onRenameBasket: (basketId: string, newName: string) => void;
+  onDeleteBasket: (basketId: string) => void;
+  onToggleValidPair: (pairKey: string) => void;
+  onSetValidPairs: (pairs: string[]) => void;
   onNewSession: () => void;
   onWipeData: () => void;
   onRestoreState: (state: AppState) => void;
@@ -20,10 +46,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   courts,
   sameType,
+  baskets,
+  validPairs,
   state,
   onClose,
   onCourtsChange,
   onToggleSameType,
+  onAddBasket,
+  onRenameBasket,
+  onDeleteBasket,
+  onToggleValidPair,
+  onSetValidPairs,
   onNewSession,
   onWipeData,
   onRestoreState,
@@ -32,14 +65,81 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showNetlifyGuide, setShowNetlifyGuide] = useState(false);
   const [showRules, setShowRules] = useState(false);
 
+  // Add basket form state
+  const [newBasketGender, setNewBasketGender] = useState<BasketGender>('female');
+  const [newBasketName, setNewBasketName] = useState('');
+
+  // Inline rename state
+  const [editingBasketId, setEditingBasketId] = useState<string | null>(null);
+  const [editingBasketName, setEditingBasketName] = useState('');
+
   if (!isOpen) return null;
+
+  const allPossiblePairs = getAllPossiblePairs(baskets);
+
+  const handleAddBasketSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newBasketName.trim();
+    if (!trimmed) {
+      onToast('Vui lòng nhập tên rổ.');
+      return;
+    }
+    if (baskets.some((b) => b.name.toLowerCase() === trimmed.toLowerCase())) {
+      onToast(`Rổ "${trimmed}" đã tồn tại.`);
+      return;
+    }
+    onAddBasket(trimmed, newBasketGender);
+    setNewBasketName('');
+  };
+
+  const handleStartRename = (b: Basket) => {
+    setEditingBasketId(b.id);
+    setEditingBasketName(b.name);
+  };
+
+  const handleCommitRename = (basketId: string) => {
+    const trimmed = editingBasketName.trim();
+    if (!trimmed) {
+      setEditingBasketId(null);
+      return;
+    }
+    onRenameBasket(basketId, trimmed);
+    setEditingBasketId(null);
+  };
+
+  const handleSelectAllPairs = () => {
+    onSetValidPairs(allPossiblePairs.map((p) => p.key));
+  };
+
+  const handleSelectMixedAndFemalePairs = () => {
+    const filtered = allPossiblePairs
+      .filter((p) => p.b1.gender === 'female' || p.b2.gender === 'female')
+      .map((p) => p.key);
+    onSetValidPairs(filtered);
+  };
+
+  const handleSelectSameGenderPairs = () => {
+    const filtered = allPossiblePairs
+      .filter((p) => p.b1.gender === p.b2.gender)
+      .map((p) => p.key);
+    onSetValidPairs(filtered);
+  };
+
+  const handleClearAllPairs = () => {
+    onSetValidPairs([]);
+  };
 
   const handleExportBackup = () => {
     try {
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
+      const dataStr =
+        'data:text/json;charset=utf-8,' +
+        encodeURIComponent(JSON.stringify(state, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `bgclub-tournament-${new Date().toISOString().slice(0, 10)}.json`);
+      downloadAnchor.setAttribute(
+        'download',
+        `bgclub-tournament-${new Date().toISOString().slice(0, 10)}.json`
+      );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -57,7 +157,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed && Array.isArray(parsed.players)) {
-          onRestoreState(parsed);
+          onRestoreState(normalizeState(parsed));
           onToast('Đã khôi phục dữ liệu thành công!');
           onClose();
         } else {
@@ -86,6 +186,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-lg hover:bg-[#eeece6] flex items-center justify-center text-[#5b6676] transition-colors"
+            aria-label="Đóng cài đặt"
           >
             <X className="w-5 h-5" />
           </button>
@@ -129,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="pr-2">
               <span className="font-bold block text-sm">Ưu tiên đối đầu cùng loại</span>
               <span className="text-xs text-[#5b6676] block mt-0.5 leading-relaxed">
-                Đôi Nam A+B gặp Nam A+B, Đôi Nam+Nữ gặp Nam+Nữ. Chỉ ghép chéo khi cần để người chưa ra sân được vào.
+                Ưu tiên Đôi Nam gặp Đôi Nam, Đôi Nam Nữ gặp Đôi Nam Nữ, Đôi Nữ gặp Đôi Nữ. Chỉ ghép chéo khi cần để người chưa ra sân được vào.
               </span>
             </div>
             <button
@@ -138,6 +239,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
                 sameType ? 'bg-[#2f8f5b]' : 'bg-[#d8d5cc]'
               }`}
+              aria-label="Ưu tiên đối đầu cùng loại"
             >
               <span
                 className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${
@@ -145,6 +247,247 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }`}
               />
             </button>
+          </div>
+
+          {/* Manage Baskets (Add Male & Female Baskets) */}
+          <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#e3e0d8] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#c9a44c]" />
+                <span className="font-bold text-sm">Quản lý rổ thăm (Nam / Nữ)</span>
+              </div>
+              <span className="text-[11px] font-bold text-[#5b6676]">
+                {baskets.length} rổ
+              </span>
+            </div>
+
+            {/* Existing Baskets List */}
+            <div className="divide-y divide-[#e3e0d8]/70 border border-[#e3e0d8] rounded-xl overflow-hidden">
+              {baskets.map((b) => {
+                const playerCount = state.players.filter((p) => !p.del && p.g === b.id).length;
+                const isEditing = editingBasketId === b.id;
+
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between gap-2 px-3 py-2.5 bg-[#fcfbf9]"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <GroupBadge g={b.id} baskets={baskets} />
+                      {isEditing ? (
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                          <input
+                            type="text"
+                            value={editingBasketName}
+                            onChange={(e) => setEditingBasketName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCommitRename(b.id);
+                              if (e.key === 'Escape') setEditingBasketId(null);
+                            }}
+                            autoFocus
+                            className="flex-1 min-w-0 text-xs font-bold px-2 py-1 rounded-lg border border-[#c9a44c] bg-white focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCommitRename(b.id)}
+                            className="p-1 rounded-lg bg-[#2f8f5b] text-white"
+                            aria-label="Lưu tên rổ"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold text-xs text-[#14233a] truncate block">
+                            {b.name}
+                          </span>
+                          <span className="text-[11px] text-[#5b6676]">
+                            {b.gender === 'male' ? 'Rổ Nam' : 'Rổ Nữ'} · {playerCount} người
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {!isEditing && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleStartRename(b)}
+                          className="w-7 h-7 rounded-lg hover:bg-[#eeece6] text-[#5b6676] hover:text-[#14233a] flex items-center justify-center transition-colors"
+                          title="Đổi tên rổ"
+                          aria-label={`Đổi tên rổ ${b.name}`}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteBasket(b.id)}
+                          disabled={baskets.length <= 1 || playerCount > 0}
+                          className="w-7 h-7 rounded-lg hover:bg-[#fbeceb] text-[#5b6676] hover:text-[#c2453b] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#5b6676] flex items-center justify-center transition-colors"
+                          title={
+                            playerCount > 0
+                              ? 'Hãy chuyển hoặc xóa người chơi trong rổ trước khi xóa rổ'
+                              : baskets.length <= 1
+                              ? 'Cần giữ lại ít nhất 1 rổ'
+                              : `Xóa rổ ${b.name}`
+                          }
+                          aria-label={`Xóa rổ ${b.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add New Basket Form */}
+            <form onSubmit={handleAddBasketSubmit} className="space-y-2 pt-1">
+              <div className="text-xs font-bold text-[#5b6676]">Thêm rổ mới</div>
+              <div className="flex bg-[#eeece6] p-1 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setNewBasketGender('male')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                    newBasketGender === 'male'
+                      ? 'bg-[#1f3a5f] text-white shadow-xs'
+                      : 'text-[#5b6676] hover:text-[#14233a]'
+                  }`}
+                >
+                  Rổ Nam
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewBasketGender('female')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                    newBasketGender === 'female'
+                      ? 'bg-[#c0567a] text-white shadow-xs'
+                      : 'text-[#5b6676] hover:text-[#14233a]'
+                  }`}
+                >
+                  Rổ Nữ
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newBasketName}
+                  onChange={(e) => setNewBasketName(e.target.value)}
+                  placeholder={
+                    newBasketGender === 'male'
+                      ? 'Tên rổ Nam (VD: Nam C, Nam D...)'
+                      : 'Tên rổ Nữ (VD: Nữ A, Nữ B...)'
+                  }
+                  className="flex-1 text-xs font-semibold px-3 py-2 rounded-xl border border-[#e3e0d8] bg-white text-[#14233a] focus:outline-none focus:border-[#c9a44c]"
+                />
+                <button
+                  type="submit"
+                  disabled={!newBasketName.trim()}
+                  className="px-3.5 py-2 rounded-xl bg-[#14233a] hover:bg-[#1f3a5f] disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1 shrink-0 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Thêm rổ
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Configure Valid Pairs */}
+          <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#e3e0d8] space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#c9a44c]" />
+                <span className="font-bold text-sm">Cài đặt cặp hợp lệ</span>
+              </div>
+              <span className="text-[11px] font-bold text-[#2f8f5b]">
+                Đang bật {validPairs.length}/{allPossiblePairs.length}
+              </span>
+            </div>
+
+            <p className="text-xs text-[#5b6676] leading-relaxed">
+              Chọn các kiểu ghép cặp đôi được phép khi bốc thăm tự động:
+            </p>
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={handleSelectAllPairs}
+                className="px-2.5 py-1 rounded-lg bg-[#eeece6] hover:bg-[#e3e0d8] text-[11px] font-bold text-[#14233a] transition-colors"
+              >
+                Chọn tất cả
+              </button>
+              <button
+                type="button"
+                onClick={handleSelectMixedAndFemalePairs}
+                className="px-2.5 py-1 rounded-lg bg-[#eeece6] hover:bg-[#e3e0d8] text-[11px] font-bold text-[#14233a] transition-colors"
+              >
+                Nam+Nữ & Nữ+Nữ
+              </button>
+              <button
+                type="button"
+                onClick={handleSelectSameGenderPairs}
+                className="px-2.5 py-1 rounded-lg bg-[#eeece6] hover:bg-[#e3e0d8] text-[11px] font-bold text-[#14233a] transition-colors"
+              >
+                Cùng giới (Nam+Nam / Nữ+Nữ)
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllPairs}
+                className="px-2.5 py-1 rounded-lg bg-[#fbeceb] hover:bg-[#f7d6d4] text-[11px] font-bold text-[#c2453b] transition-colors"
+              >
+                Bỏ chọn hết
+              </button>
+            </div>
+
+            {/* Pairs Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {allPossiblePairs.map(({ key, b1, b2 }) => {
+                const isActive = validPairs.includes(key);
+                const pairKey = getPairKey(b1.id, b2.id);
+
+                return (
+                  <button
+                    key={pairKey}
+                    type="button"
+                    onClick={() => onToggleValidPair(pairKey)}
+                    className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border text-left transition-all ${
+                      isActive
+                        ? 'bg-[#e5f3ea]/60 border-[#2f8f5b] text-[#14233a] shadow-2xs'
+                        : 'bg-[#faf9f6] border-[#e3e0d8] text-[#5b6676] opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <GroupBadge g={b1.id} baskets={baskets} className="text-[10px] min-w-5 h-4" />
+                      <span className="text-[11px] font-bold text-[#5b6676]">+</span>
+                      <GroupBadge g={b2.id} baskets={baskets} className="text-[10px] min-w-5 h-4" />
+                      <span className="text-xs font-bold truncate ml-0.5">
+                        {b1.name} + {b2.name}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-colors ${
+                        isActive
+                          ? 'bg-[#2f8f5b] text-white'
+                          : 'bg-[#e3e0d8] text-transparent'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {validPairs.length === 0 && (
+              <div className="bg-[#fbeceb] text-[#c2453b] p-2.5 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Cần bật ít nhất 1 cặp hợp lệ để sử dụng chức năng bốc thăm tự động.</span>
+              </div>
+            )}
           </div>
 
           {/* Netlify Deployment Section */}
@@ -221,7 +564,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {showRules && (
               <div className="pt-2 text-xs text-[#5b6676] space-y-2 border-t border-[#e3e0d8] leading-relaxed">
                 <p>
-                  • <b>Ghép cặp đôi:</b> 3 rổ thăm (Nam A, Nam B, Nữ). Mỗi cặp đấu gồm <b>Nam A + Nữ</b>, <b>Nam B + Nữ</b>, hoặc <b>Nữ + Nữ</b>.
+                  • <b>Ghép cặp đôi:</b> Dựa theo danh sách các rổ thăm (Nam / Nữ) và các cặp hợp lệ được bật trong Cài đặt.
                 </p>
                 <p>
                   • <b>Xoay vòng lượt chơi:</b> Chỉ tính những người đang chờ, không tính thời gian chờ; ưu tiên người có số lượt ra sân ít nhất để đảm bảo cơ hội ra sân công bằng cho mọi thành viên.

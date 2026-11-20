@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Trophy, Copy, Check, Share2 } from 'lucide-react';
-import { Player, HistoryMatch, GroupType, GROUP_LABELS } from '../types.ts';
+import { Trophy, Check, Share2 } from 'lucide-react';
+import { Player, HistoryMatch, GroupType, Basket } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
+import { getBasketName } from '../utils/drawLogic.ts';
 
 interface RankTabProps {
   players: Player[];
   history: HistoryMatch[];
+  baskets: Basket[];
   filter: 'all' | GroupType;
   onFilterChange: (f: 'all' | GroupType) => void;
   onToast: (msg: string) => void;
@@ -14,6 +16,7 @@ interface RankTabProps {
 export const RankTab: React.FC<RankTabProps> = ({
   players,
   history,
+  baskets,
   filter,
   onFilterChange,
   onToast,
@@ -21,7 +24,6 @@ export const RankTab: React.FC<RankTabProps> = ({
   const [showCopyArea, setShowCopyArea] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Calculate statistics
   const statsMap: Record<number, { w: number; l: number; pf: number; pa: number }> = {};
   players.forEach((p) => {
     statsMap[p.id] = { w: 0, l: 0, pf: 0, pa: 0 };
@@ -50,8 +52,7 @@ export const RankTab: React.FC<RankTabProps> = ({
     });
   });
 
-  // Filter and sort list
-  let filtered = players.filter((p) => !p.del && (filter === 'all' || p.g === filter));
+  const filtered = players.filter((p) => !p.del && (filter === 'all' || p.g === filter));
 
   const ranked = filtered
     .map((p) => {
@@ -95,7 +96,7 @@ export const RankTab: React.FC<RankTabProps> = ({
     activeRanked.forEach((x, i) => {
       const sign = x.d > 0 ? '+' : '';
       const medal = i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : `${i + 1}. `;
-      text += `${medal}${x.p.name} (${GROUP_LABELS[x.p.g]}): ${x.s.w}T – ${x.s.l}B (Hiệu số: ${sign}${x.d})\n`;
+      text += `${medal}${x.p.name} (${getBasketName(baskets, x.p.g)}): ${x.s.w}T – ${x.s.l}B (Hiệu số: ${sign}${x.d})\n`;
     });
 
     return text;
@@ -121,21 +122,19 @@ export const RankTab: React.FC<RankTabProps> = ({
 
   const filterTabs: { id: 'all' | GroupType; label: string }[] = [
     { id: 'all', label: 'Tất cả' },
-    { id: 'A', label: 'Nam A' },
-    { id: 'B', label: 'Nam B' },
-    { id: 'N', label: 'Nữ' },
+    ...baskets.map((b) => ({ id: b.id, label: b.name })),
   ];
 
   return (
     <div className="space-y-3">
       {/* Category Filter Segments */}
-      <div className="flex bg-[#eeece6] p-1 rounded-xl gap-1">
+      <div className="flex flex-wrap bg-[#eeece6] p-1 rounded-xl gap-1">
         {filterTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onFilterChange(tab.id)}
-            className={`flex-1 py-2 px-2 rounded-lg font-bold text-xs transition-all ${
+            className={`flex-1 min-w-[70px] py-2 px-2 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${
               filter === tab.id
                 ? 'bg-white text-[#14233a] shadow-xs'
                 : 'text-[#5b6676] hover:text-[#14233a]'
@@ -198,7 +197,7 @@ export const RankTab: React.FC<RankTabProps> = ({
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <GroupBadge g={x.p.g} />
+                          <GroupBadge g={x.p.g} baskets={baskets} />
                           <span className="font-bold text-[#14233a] truncate">
                             {x.p.name}
                           </span>

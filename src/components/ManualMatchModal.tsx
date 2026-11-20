@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowLeftRight, Check, AlertCircle, Sparkles } from 'lucide-react';
-import { Player, ActiveMatch } from '../types.ts';
+import { X, ArrowLeftRight, Check, AlertCircle } from 'lucide-react';
+import { Player, ActiveMatch, Basket } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
-import { getBusySet, getTeamTypeLabel, isValidTeam } from '../utils/drawLogic.ts';
+import { getBusySet, getTeamTypeLabel, isValidTeam, getBasketName } from '../utils/drawLogic.ts';
 
 interface ManualMatchModalProps {
   isOpen: boolean;
@@ -10,6 +10,8 @@ interface ManualMatchModalProps {
   existingMatch?: ActiveMatch;
   players: Player[];
   activeMatches: Record<number, ActiveMatch>;
+  baskets: Basket[];
+  validPairs: string[];
   onClose: () => void;
   onSave: (
     courtIndex: number,
@@ -25,6 +27,8 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
   existingMatch,
   players,
   activeMatches,
+  baskets,
+  validPairs,
   onClose,
   onSave,
 }) => {
@@ -36,7 +40,6 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
   const busy = getBusySet(activeMatches);
   const isEdit = Boolean(existingMatch);
 
-  // If editing an existing match, exclude its current 4 players from the busy check
   const currentMatchPlayerIds = existingMatch
     ? new Set([...existingMatch.t1, ...existingMatch.t2])
     : new Set<number>();
@@ -71,11 +74,11 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
   const p2_1 = getPlayer(t2p1);
   const p2_2 = getPlayer(t2p2);
 
-  const t1Label = p1_1 && p1_2 ? getTeamTypeLabel(p1_1, p1_2) : 'Chưa đủ người';
-  const t2Label = p2_1 && p2_2 ? getTeamTypeLabel(p2_1, p2_2) : 'Chưa đủ người';
+  const t1Label = p1_1 && p1_2 ? getTeamTypeLabel(p1_1, p1_2, baskets) : 'Chưa đủ người';
+  const t2Label = p2_1 && p2_2 ? getTeamTypeLabel(p2_1, p2_2, baskets) : 'Chưa đủ người';
 
-  const t1Valid = p1_1 && p1_2 ? isValidTeam([p1_1, p1_2]) : false;
-  const t2Valid = p2_1 && p2_2 ? isValidTeam([p2_1, p2_2]) : false;
+  const t1Valid = p1_1 && p1_2 ? isValidTeam([p1_1, p1_2], validPairs) : false;
+  const t2Valid = p2_1 && p2_2 ? isValidTeam([p2_1, p2_2], validPairs) : false;
 
   const handleSwapTeams = () => {
     const oldT1p1 = t1p1;
@@ -97,7 +100,6 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
     onClose();
   };
 
-  // Filter available players: active present players
   const availablePlayers = players
     .filter((p) => p.on && !p.del)
     .sort((a, b) => a.turns - b.turns || a.name.localeCompare(b.name, 'vi'));
@@ -113,7 +115,7 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
       <div className="space-y-1">
         <label className="text-[11px] font-bold text-[#5b6676] block">{label}</label>
         <div className="flex items-center gap-1.5">
-          {curr && <GroupBadge g={curr.g} />}
+          {curr && <GroupBadge g={curr.g} baskets={baskets} />}
           <select
             value={currentValue}
             onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
@@ -135,7 +137,7 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
                   value={p.id}
                   disabled={isPlayerBusy || isAlreadySelected}
                 >
-                  [{p.g === 'N' ? 'Nữ' : p.g}] {p.name} {suffix}
+                  [{getBasketName(baskets, p.g)}] {p.name} {suffix}
                 </option>
               );
             })}
@@ -154,14 +156,13 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
         className="bg-[#f3f1ec] w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[#e3e0d8] max-h-[92vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="bg-white px-5 py-4 border-b border-[#e3e0d8] flex items-center justify-between">
           <div>
             <h3 className="font-extrabold text-[#14233a] text-base">
               {isEdit ? `Chỉnh sửa Sân ${courtIndex + 1}` : `Ghép cặp thủ công Sân ${courtIndex + 1}`}
             </h3>
             <p className="text-xs text-[#5b6676] mt-0.5">
-              Quy ước: Nam A + Nữ, Nam B + Nữ, hoặc Nữ + Nữ
+              Chọn 4 người chơi vào sân (cho phép ghép tự do)
             </p>
           </div>
           <button
@@ -173,9 +174,7 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-5 overflow-y-auto space-y-4">
-          {/* Quick Swap Button */}
           <div className="flex justify-end">
             <button
               type="button"
@@ -188,7 +187,6 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
             </button>
           </div>
 
-          {/* Team 1 Card */}
           <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#e3e0d8] space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-xs uppercase tracking-wider text-[#14233a]">
@@ -211,12 +209,10 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
             {renderPlayerSelect('Người chơi 2 (Đội 1)', t1p2, setT1p2)}
           </div>
 
-          {/* VS Indicator */}
           <div className="text-center font-extrabold text-[#c9a44c] text-xs">
             VS
           </div>
 
-          {/* Team 2 Card */}
           <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#e3e0d8] space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-xs uppercase tracking-wider text-[#14233a]">
@@ -239,7 +235,6 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
             {renderPlayerSelect('Người chơi 2 (Đội 2)', t2p2, setT2p2)}
           </div>
 
-          {/* Warning / Error messages */}
           {hasDuplicates && (
             <div className="bg-[#fbeceb] text-[#c2453b] p-3 rounded-xl text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -251,13 +246,12 @@ export const ManualMatchModal: React.FC<ManualMatchModalProps> = ({
             <div className="bg-[#fff6e0] text-[#7a5a12] p-3 rounded-xl text-xs flex items-start gap-2 leading-relaxed">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#c9a44c]" />
               <span>
-                <b>Lưu ý:</b> Quy tắc thông thường yêu cầu mỗi cặp là (Nam A + Nữ, Nam B + Nữ, hoặc Nữ + Nữ). Với tư cách người quản lý, bạn vẫn có thể bấm Lưu để sắp xếp trận này.
+                <b>Lưu ý:</b> Cặp này hiện không nằm trong danh sách "Cặp hợp lệ" ở Cài đặt. Với tư cách người quản lý, bạn vẫn có thể bấm Lưu để xếp trận này.
               </span>
             </div>
           )}
         </div>
 
-        {/* Footer */}
         <div className="bg-white px-5 py-3 border-t border-[#e3e0d8] flex gap-2">
           <button
             type="button"

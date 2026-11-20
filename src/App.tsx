@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { AppState, TabType, GroupType, Player, ActiveMatch, HistoryMatch } from './types.ts';
+import { AppState, GroupType, Player, ActiveMatch, HistoryMatch, Basket, BasketGender } from './types.ts';
 import { loadState, saveState, getFreshState, SAMPLE_PLAYERS } from './utils/storage.ts';
-import { findMatch, getPresentPlayers, getBusySet, getMinTurns } from './utils/drawLogic.ts';
+import { findMatch, getPresentPlayers, getBusySet, getMinTurns, getBasketName, getPairKey } from './utils/drawLogic.ts';
 import { Header } from './components/Header.tsx';
 import { Navigation } from './components/Navigation.tsx';
 import { CourtsTab } from './components/CourtsTab.tsx';
@@ -21,6 +21,26 @@ import { ManualMatchModal } from './components/ManualMatchModal.tsx';
 import { EditPlayerModal } from './components/EditPlayerModal.tsx';
 import { EditHistoryModal } from './components/EditHistoryModal.tsx';
 
+const MALE_COLORS = ['#1f3a5f', '#3f7ab8', '#2c5282', '#1d4ed8', '#0f766e', '#334155'];
+const FEMALE_COLORS = ['#c0567a', '#9d174d', '#db2777', '#be185d', '#a21caf', '#e11d48'];
+
+function deriveShortLabel(name: string, gender: BasketGender): string {
+  const trimmed = name.trim();
+  if (gender === 'male') {
+    if (/^nam\s+/i.test(trimmed)) {
+      const rest = trimmed.replace(/^nam\s+/i, '').trim();
+      if (rest.length > 0 && rest.length <= 4) return rest;
+    }
+    return trimmed.slice(0, 4);
+  }
+  if (/^nữ$/i.test(trimmed)) return 'Nữ';
+  if (/^nữ\s+/i.test(trimmed)) {
+    const rest = trimmed.replace(/^nữ\s+/i, '').trim();
+    if (rest.length > 0 && rest.length <= 2) return `Nữ ${rest}`;
+  }
+  return trimmed.slice(0, 4);
+}
+
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadState());
   const [rollingCourts, setRollingCourts] = useState<Set<number>>(new Set());
@@ -28,7 +48,6 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Modals for manual editing
   const [manualMatchModal, setManualMatchModal] = useState<{
     isOpen: boolean;
     courtIndex: number;
@@ -69,7 +88,6 @@ export default function App() {
 
   const toastTimerRef = useRef<number | null>(null);
 
-  // Auto save to localStorage whenever state changes
   useEffect(() => {
     saveState(state);
   }, [state]);
@@ -89,7 +107,6 @@ export default function App() {
     return p ? p.name : '(Đã xóa)';
   };
 
-  // Helper to trigger slot machine roll animation
   const triggerRollAnimation = (
     courtIndices: number[],
     preparedMatches: { court: number; t1: [number, number]; t2: [number, number]; id: number }[]
@@ -103,7 +120,7 @@ export default function App() {
         navigator.vibrate(30);
       }
     } catch {
-      // Haptics not supported or ignored
+      // Haptics not supported
     }
 
     setRollingCourts(new Set(courtIndices));
@@ -140,7 +157,6 @@ export default function App() {
         // Ignored
       }
 
-      // Apply the matches to state
       setState((prev) => {
         const nextActive = { ...prev.active };
         const nextPlayers = [...prev.players];
@@ -173,11 +189,17 @@ export default function App() {
     }, 1100);
   };
 
-  // Draw for a single court (only idle players, no wait time)
   const handleDrawCourt = (courtIdx: number) => {
     if (state.active[courtIdx] || rollingCourts.has(courtIdx)) return;
 
-    const res = findMatch(state.players, state.active, state.history, state.sameType);
+    const res = findMatch(
+      state.players,
+      state.active,
+      state.history,
+      state.sameType,
+      state.baskets,
+      state.validPairs
+    );
     if (res.err) {
       showToast(res.err, 4500);
       return;
@@ -196,7 +218,6 @@ export default function App() {
     ]);
   };
 
-  // Draw for all available empty courts
   const handleDrawAllFree = () => {
     const freeCourts = Array.from({ length: state.courts }, (_, i) => i).filter(
       (i) => !state.active[i] && !rollingCourts.has(i)
@@ -207,13 +228,20 @@ export default function App() {
       return;
     }
 
-    let tempActive = { ...state.active };
-    let tempPlayers = [...state.players];
+    const tempActive = { ...state.active };
+    const tempPlayers = state.players.map((p) => ({ ...p }));
     let tempSeq = state.seq;
     const prepared: { court: number; t1: [number, number]; t2: [number, number]; id: number }[] = [];
 
     for (const c of freeCourts) {
-      const res = findMatch(tempPlayers, tempActive, state.history, state.sameType);
+      const res = findMatch(
+        tempPlayers,
+        tempActive,
+        state.history,
+        state.sameType,
+        state.baskets,
+        state.validPairs
+      );
       if (res.err || !res.t1 || !res.t2) break;
 
       tempSeq++;
@@ -237,7 +265,7 @@ export default function App() {
     }
 
     if (!prepared.length) {
-      showToast('Không đủ người chơi hợp lệ để bốc thăm thêm sân (cần đủ người chơi Nữ).');
+      showToast('Không đủ người chơi hợp lệ theo cài đặt hiện tại để bốc thăm thêm sân.');
       return;
     }
 
@@ -248,7 +276,6 @@ export default function App() {
     );
   };
 
-  // Manual Match Save (Create or Edit)
   const handleManualSaveMatch = (
     courtIndex: number,
     t1: [number, number],
@@ -257,7 +284,7 @@ export default function App() {
   ) => {
     setState((prev) => {
       const nextActive = { ...prev.active };
-      const nextPlayers = [...prev.players];
+      const nextPlayers = prev.players.map((p) => ({ ...p }));
       let newSeq = prev.seq;
 
       if (isEdit) {
@@ -266,7 +293,6 @@ export default function App() {
           const oldIds = new Set([...oldMatch.t1, ...oldMatch.t2]);
           const newIds = new Set([...t1, ...t2]);
 
-          // Refund turns for players removed from match
           oldIds.forEach((pid) => {
             if (!newIds.has(pid)) {
               const p = nextPlayers.find((x) => x.id === pid);
@@ -274,7 +300,6 @@ export default function App() {
             }
           });
 
-          // Add turn for players newly added into match
           newIds.forEach((pid) => {
             if (!oldIds.has(pid)) {
               const p = nextPlayers.find((x) => x.id === pid);
@@ -289,7 +314,6 @@ export default function App() {
           };
         }
       } else {
-        // Create brand new match manually
         newSeq++;
         nextActive[courtIndex] = {
           id: newSeq,
@@ -518,9 +542,10 @@ export default function App() {
       players: [...prev.players, ...newPlayers],
     }));
 
+    const basketName = getBasketName(state.baskets, g);
     let msg = '';
     if (addedCount > 0) {
-      msg = `Đã thêm ${addedCount} người vào rổ ${g === 'A' ? 'Nam A' : g === 'B' ? 'Nam B' : 'Nữ'}`;
+      msg = `Đã thêm ${addedCount} người vào rổ ${basketName}`;
       if (state.history.length > 0 || Object.keys(state.active).length > 0) {
         msg += ' (sẽ được ưu tiên bốc ở lượt tới).';
       } else {
@@ -557,20 +582,6 @@ export default function App() {
         }),
       };
     });
-  };
-
-  const handleChangePlayerGroup = (playerId: number, g: GroupType) => {
-    const busy = getBusySet(state.active);
-    if (busy.has(playerId)) {
-      showToast('Người này đang trên sân, hãy đổi rổ sau khi kết thúc trận.');
-      return;
-    }
-
-    setState((prev) => ({
-      ...prev,
-      players: prev.players.map((p) => (p.id === playerId ? { ...p, g } : p)),
-    }));
-    showToast(`Đã chuyển sang rổ ${g === 'A' ? 'Nam A' : g === 'B' ? 'Nam B' : 'Nữ'}.`);
   };
 
   const handleDeletePlayer = (playerId: number) => {
@@ -638,10 +649,110 @@ export default function App() {
     showToast('Đã cập nhật kết quả và tính toán lại bảng xếp hạng!');
   };
 
+  // Basket Management Handlers
+  const handleAddBasket = (name: string, gender: BasketGender) => {
+    setState((prev) => {
+      const nextSeq = prev.seq + 1;
+      const newId = `${gender === 'male' ? 'M' : 'F'}_${nextSeq}`;
+      const palette = gender === 'male' ? MALE_COLORS : FEMALE_COLORS;
+      const usedColors = new Set(prev.baskets.map((b) => b.color));
+      const color = palette.find((c) => !usedColors.has(c)) || palette[prev.baskets.length % palette.length];
+
+      const newBasket: Basket = {
+        id: newId,
+        name: name.trim(),
+        shortLabel: deriveShortLabel(name, gender),
+        gender,
+        color,
+      };
+
+      const nextBaskets = [...prev.baskets, newBasket];
+
+      // Auto-enable pairing combinations for the new basket with all existing baskets + itself so it works immediately
+      const newPairs = nextBaskets.map((b) => getPairKey(b.id, newId));
+      const nextValidPairs = Array.from(new Set([...prev.validPairs, ...newPairs]));
+
+      return {
+        ...prev,
+        seq: nextSeq,
+        baskets: nextBaskets,
+        validPairs: nextValidPairs,
+      };
+    });
+    showToast(`Đã thêm rổ ${name} (${gender === 'male' ? 'Nam' : 'Nữ'}) và tự động bật các cặp tương ứng.`);
+  };
+
+  const handleRenameBasket = (basketId: string, newName: string) => {
+    setState((prev) => ({
+      ...prev,
+      baskets: prev.baskets.map((b) =>
+        b.id === basketId
+          ? {
+              ...b,
+              name: newName.trim(),
+              shortLabel: deriveShortLabel(newName, b.gender),
+            }
+          : b
+      ),
+    }));
+    showToast(`Đã đổi tên rổ thành "${newName.trim()}".`);
+  };
+
+  const handleDeleteBasket = (basketId: string) => {
+    const hasPlayers = state.players.some((p) => !p.del && p.g === basketId);
+    if (hasPlayers) {
+      showToast('Hãy xóa hoặc chuyển người chơi sang rổ khác trước khi xóa rổ này.');
+      return;
+    }
+    if (state.baskets.length <= 1) {
+      showToast('Phải giữ lại ít nhất 1 rổ.');
+      return;
+    }
+
+    const target = state.baskets.find((b) => b.id === basketId);
+    setState((prev) => {
+      const nextBaskets = prev.baskets.filter((b) => b.id !== basketId);
+      const nextValidPairs = prev.validPairs.filter((pk) => {
+        const [a, b] = pk.split('|');
+        return a !== basketId && b !== basketId;
+      });
+      const nextAddG = prev.addG === basketId ? nextBaskets[0].id : prev.addG;
+      const nextRankF = prev.rankF === basketId ? 'all' : prev.rankF;
+
+      return {
+        ...prev,
+        baskets: nextBaskets,
+        validPairs: nextValidPairs,
+        addG: nextAddG,
+        rankF: nextRankF,
+      };
+    });
+    showToast(`Đã xóa rổ ${target?.name || ''}.`);
+  };
+
+  const handleToggleValidPair = (pairKey: string) => {
+    setState((prev) => {
+      const exists = prev.validPairs.includes(pairKey);
+      return {
+        ...prev,
+        validPairs: exists
+          ? prev.validPairs.filter((k) => k !== pairKey)
+          : [...prev.validPairs, pairKey],
+      };
+    });
+  };
+
+  const handleSetValidPairs = (pairs: string[]) => {
+    setState((prev) => ({
+      ...prev,
+      validPairs: pairs,
+    }));
+  };
+
   const handleNewSession = () => {
     setConfirmModal({
       isOpen: true,
-      message: 'Bắt đầu ván mới? Toàn bộ danh sách người chơi sẽ được giữ nguyên, xóa toàn bộ các trận đấu và kết quả.',
+      message: 'Bắt đầu ván mới? Toàn bộ danh sách người chơi, rổ và cài đặt cặp hợp lệ sẽ được giữ nguyên, chỉ xóa các trận đấu và kết quả.',
       confirmLabel: 'Ván mới',
       isDanger: true,
       onConfirm: () => {
@@ -701,13 +812,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#f3f1ec] text-[#14233a] flex flex-col font-sans pb-24">
-      {/* Top Header */}
       <Header
         players={state.players}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1 w-full max-w-2xl mx-auto px-3.5 pt-4">
         {state.tab === 'courts' && (
           <CourtsTab
@@ -715,6 +824,8 @@ export default function App() {
             active={state.active}
             players={state.players}
             history={state.history}
+            baskets={state.baskets}
+            validPairs={state.validPairs}
             sameType={state.sameType}
             rollingCourts={rollingCourts}
             rollingNames={rollingNames}
@@ -739,6 +850,7 @@ export default function App() {
             }
             onNavigateToPlayers={() => setState((s) => ({ ...s, tab: 'players' }))}
             onLoadSamplePlayers={handleLoadSamplePlayers}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         )}
 
@@ -747,14 +859,15 @@ export default function App() {
             players={state.players}
             active={state.active}
             history={state.history}
+            baskets={state.baskets}
             selectedGroup={state.addG}
             onSelectGroup={(g) => setState((s) => ({ ...s, addG: g }))}
             onAddPlayers={handleAddPlayers}
             onToggleAttendance={handleToggleAttendance}
-            onChangePlayerGroup={handleChangePlayerGroup}
             onDeletePlayer={handleDeletePlayer}
             onEditPlayer={(p) => setEditPlayerModal({ isOpen: true, player: p })}
             onLoadSamplePlayers={handleLoadSamplePlayers}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         )}
 
@@ -762,6 +875,7 @@ export default function App() {
           <RankTab
             players={state.players}
             history={state.history}
+            baskets={state.baskets}
             filter={state.rankF}
             onFilterChange={(f) => setState((s) => ({ ...s, rankF: f }))}
             onToast={showToast}
@@ -772,13 +886,13 @@ export default function App() {
           <HistoryTab
             history={state.history}
             players={state.players}
+            baskets={state.baskets}
             onDeleteMatch={handleDeleteMatch}
             onEditMatch={(m) => setEditHistoryModal({ isOpen: true, match: m })}
           />
         )}
       </main>
 
-      {/* Fixed Bottom Navigation */}
       <Navigation
         currentTab={state.tab}
         onSelectTab={(tab) => {
@@ -789,50 +903,56 @@ export default function App() {
         playerCount={getPresentPlayers(state.players).length}
       />
 
-      {/* Manual Match Creation / Edit Active Match Modal */}
       <ManualMatchModal
         isOpen={manualMatchModal.isOpen}
         courtIndex={manualMatchModal.courtIndex}
         existingMatch={manualMatchModal.existingMatch}
         players={state.players}
         activeMatches={state.active}
+        baskets={state.baskets}
+        validPairs={state.validPairs}
         onClose={() => setManualMatchModal((m) => ({ ...m, isOpen: false, existingMatch: undefined }))}
         onSave={handleManualSaveMatch}
       />
 
-      {/* Manual Edit Player Modal */}
       <EditPlayerModal
         isOpen={editPlayerModal.isOpen}
         player={editPlayerModal.player}
+        baskets={state.baskets}
         onClose={() => setEditPlayerModal({ isOpen: false, player: null })}
         onSave={handleSaveEditPlayer}
       />
 
-      {/* Manual Edit History Match Modal */}
       <EditHistoryModal
         isOpen={editHistoryModal.isOpen}
         match={editHistoryModal.match}
         players={state.players}
+        baskets={state.baskets}
         onClose={() => setEditHistoryModal({ isOpen: false, match: null })}
         onSave={handleSaveEditHistory}
       />
 
-      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         courts={state.courts}
         sameType={state.sameType}
+        baskets={state.baskets}
+        validPairs={state.validPairs}
         state={state}
         onClose={() => setIsSettingsOpen(false)}
         onCourtsChange={(courts) => setState((s) => ({ ...s, courts }))}
         onToggleSameType={() => setState((s) => ({ ...s, sameType: !s.sameType }))}
+        onAddBasket={handleAddBasket}
+        onRenameBasket={handleRenameBasket}
+        onDeleteBasket={handleDeleteBasket}
+        onToggleValidPair={handleToggleValidPair}
+        onSetValidPairs={handleSetValidPairs}
         onNewSession={handleNewSession}
         onWipeData={handleWipeData}
         onRestoreState={(newState) => setState(newState)}
         onToast={showToast}
       />
 
-      {/* Reusable Confirm Modal */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         message={confirmModal.message}
@@ -842,7 +962,6 @@ export default function App() {
         onCancel={() => setConfirmModal((m) => ({ ...m, isOpen: false }))}
       />
 
-      {/* Toast Notification */}
       <Toast message={toastMessage} />
     </div>
   );

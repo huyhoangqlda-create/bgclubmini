@@ -1,40 +1,43 @@
 import React, { useState } from 'react';
-import { UserPlus, Sparkles, X, Edit2, Sliders } from 'lucide-react';
-import { Player, GroupType, GROUP_LABELS, ActiveMatch, HistoryMatch } from '../types.ts';
+import { UserPlus, Sparkles, X, Edit2, Settings } from 'lucide-react';
+import { Player, GroupType, ActiveMatch, HistoryMatch, Basket } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
-import { getBusySet } from '../utils/drawLogic.ts';
+import { getBusySet, getBasketName } from '../utils/drawLogic.ts';
 
 interface PlayersTabProps {
   players: Player[];
   active: Record<number, ActiveMatch>;
   history: HistoryMatch[];
+  baskets: Basket[];
   selectedGroup: GroupType;
   onSelectGroup: (g: GroupType) => void;
   onAddPlayers: (names: string[], g: GroupType) => void;
   onToggleAttendance: (id: number) => void;
-  onChangePlayerGroup: (id: number, g: GroupType) => void;
   onDeletePlayer: (id: number) => void;
   onEditPlayer: (player: Player) => void;
   onLoadSamplePlayers: () => void;
+  onOpenSettings: () => void;
 }
 
 export const PlayersTab: React.FC<PlayersTabProps> = ({
   players,
   active,
   history,
+  baskets,
   selectedGroup,
   onSelectGroup,
   onAddPlayers,
   onToggleAttendance,
-  onChangePlayerGroup,
   onDeletePlayer,
   onEditPlayer,
   onLoadSamplePlayers,
+  onOpenSettings,
 }) => {
   const [namesText, setNamesText] = useState('');
   const busy = getBusySet(active);
 
-  // Compute individual stats
+  const activeBasket = baskets.find((b) => b.id === selectedGroup) || baskets[0];
+
   const statsMap: Record<number, { w: number; l: number; gp: number }> = {};
   players.forEach((p) => {
     statsMap[p.id] = { w: 0, l: 0, gp: 0 };
@@ -61,37 +64,44 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
   const handleAdd = () => {
     const lines = namesText.split(/[\n,;]/);
     const valid = lines.map((s) => s.trim()).filter(Boolean);
-    if (!valid.length) return;
-    onAddPlayers(valid, selectedGroup);
+    if (!valid.length || !activeBasket) return;
+    onAddPlayers(valid, activeBasket.id);
     setNamesText('');
   };
-
-  const groups: GroupType[] = ['A', 'B', 'N'];
 
   return (
     <div className="space-y-4">
       {/* Add Players Box */}
       <div className="bg-white rounded-2xl p-4 shadow-xs border border-[#e3e0d8] space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold text-[#5b6676]">Chọn rổ để thêm người chơi</span>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="text-[11px] font-bold text-[#1f3a5f] hover:underline flex items-center gap-1"
+          >
+            <Settings className="w-3 h-3" />
+            Thêm rổ Nam / Nữ
+          </button>
+        </div>
+
         {/* Basket selector tabs */}
-        <div className="flex bg-[#eeece6] p-1 rounded-xl gap-1">
-          {groups.map((g) => {
-            const isSelected = selectedGroup === g;
+        <div className="flex flex-wrap bg-[#eeece6] p-1 rounded-xl gap-1">
+          {baskets.map((b) => {
+            const isSelected = activeBasket?.id === b.id;
             return (
               <button
-                key={g}
+                key={b.id}
                 type="button"
-                onClick={() => onSelectGroup(g)}
-                className={`flex-1 py-2 px-2 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                onClick={() => onSelectGroup(b.id)}
+                style={isSelected ? { backgroundColor: b.color } : undefined}
+                className={`flex-1 min-w-[80px] py-2 px-2 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
                   isSelected
-                    ? g === 'A'
-                      ? 'bg-[#1f3a5f] text-white shadow-xs'
-                      : g === 'B'
-                      ? 'bg-[#3f7ab8] text-white shadow-xs'
-                      : 'bg-[#c0567a] text-white shadow-xs'
+                    ? 'text-white shadow-xs'
                     : 'text-[#5b6676] hover:text-[#14233a]'
                 }`}
               >
-                Rổ {GROUP_LABELS[g]}
+                Rổ {b.name}
               </button>
             );
           })}
@@ -102,7 +112,7 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
           rows={3}
           value={namesText}
           onChange={(e) => setNamesText(e.target.value)}
-          placeholder={`Nhập tên cho rổ ${GROUP_LABELS[selectedGroup]} (mỗi dòng một người, hoặc cách nhau bởi dấu phẩy)&#10;VD:&#10;Hoàng&#10;Tuấn&#10;Minh`}
+          placeholder={`Nhập tên cho rổ ${activeBasket?.name || ''} (mỗi dòng một người, hoặc cách nhau bởi dấu phẩy)&#10;VD:&#10;Hoàng&#10;Tuấn&#10;Minh`}
           className="w-full text-sm p-3 rounded-xl border border-[#e3e0d8] bg-white focus:outline-none focus:border-[#c9a44c] focus:ring-2 focus:ring-[#c9a44c]/20 resize-none font-medium text-[#14233a] placeholder:text-[#5b6676]/60"
         />
 
@@ -114,7 +124,7 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
             className="flex-1 py-2.5 px-4 rounded-xl font-bold text-sm bg-[#14233a] hover:bg-[#1f3a5f] disabled:opacity-40 text-white flex items-center justify-center gap-1.5 transition-colors"
           >
             <UserPlus className="w-4 h-4" />
-            + Thêm vào rổ {GROUP_LABELS[selectedGroup]}
+            + Thêm vào rổ {activeBasket?.name || ''}
           </button>
 
           {players.filter((p) => !p.del).length === 0 && (
@@ -133,18 +143,21 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
 
       {/* Players grouped by basket */}
       <div className="space-y-4">
-        {groups.map((g) => {
-          const list = players.filter((p) => !p.del && p.g === g);
+        {baskets.map((b) => {
+          const list = players.filter((p) => !p.del && p.g === b.id);
           const presentCount = list.filter((p) => p.on).length;
 
           return (
-            <div key={g} className="space-y-1.5">
+            <div key={b.id} className="space-y-1.5">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
-                  <GroupBadge g={g} />
+                  <GroupBadge g={b.id} baskets={baskets} />
                   <h3 className="font-extrabold text-xs uppercase tracking-wider text-[#14233a]">
-                    Rổ {GROUP_LABELS[g]}
+                    Rổ {b.name}
                   </h3>
+                  <span className="text-[11px] text-[#5b6676] font-medium">
+                    ({b.gender === 'male' ? 'Nam' : 'Nữ'})
+                  </span>
                 </div>
                 <span className="text-xs font-bold text-[#5b6676]">
                   {presentCount}/{list.length} có mặt
@@ -153,7 +166,7 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
 
               {list.length === 0 ? (
                 <div className="bg-white rounded-xl p-3 text-center text-xs text-[#5b6676] border border-[#e3e0d8]/80 italic">
-                  Chưa có ai trong rổ {GROUP_LABELS[g]}.
+                  Chưa có ai trong rổ {b.name}.
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl shadow-xs border border-[#e3e0d8] divide-y divide-[#e3e0d8]/70 overflow-hidden">
@@ -168,7 +181,6 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
                           p.on ? 'bg-white' : 'bg-[#faf9f6] opacity-75'
                         }`}
                       >
-                        {/* Name and Match count info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span
@@ -192,7 +204,6 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
                           </div>
                         </div>
 
-                        {/* Edit Player Button (Pencil) */}
                         <button
                           type="button"
                           onClick={() => onEditPlayer(p)}
@@ -203,7 +214,6 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Attendance Toggle switch */}
                         <button
                           type="button"
                           onClick={() => onToggleAttendance(p.id)}
@@ -220,7 +230,6 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
                           />
                         </button>
 
-                        {/* Delete button */}
                         <button
                           type="button"
                           onClick={() => onDeletePlayer(p.id)}
@@ -237,6 +246,36 @@ export const PlayersTab: React.FC<PlayersTabProps> = ({
             </div>
           );
         })}
+
+        {/* Fallback for any players belonging to a removed/unknown basket ID */}
+        {(() => {
+          const validIds = new Set(baskets.map((b) => b.id));
+          const orphaned = players.filter((p) => !p.del && !validIds.has(p.g));
+          if (!orphaned.length) return null;
+          return (
+            <div className="space-y-1.5">
+              <div className="px-1 text-xs font-extrabold uppercase text-[#c2453b]">
+                Rổ khác ({orphaned.length})
+              </div>
+              <div className="bg-white rounded-2xl shadow-xs border border-[#e3e0d8] divide-y divide-[#e3e0d8]/70 overflow-hidden">
+                {orphaned.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 p-3">
+                    <span className="flex-1 font-bold text-sm text-[#14233a]">
+                      {p.name} ({getBasketName(baskets, p.g)})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onEditPlayer(p)}
+                      className="w-8 h-8 rounded-lg hover:bg-[#eeece6] flex items-center justify-center"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="bg-[#f3f1ec] text-[12px] text-[#5b6676] p-2 leading-relaxed">

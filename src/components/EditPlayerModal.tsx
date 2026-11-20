@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, User } from 'lucide-react';
-import { Player, GroupType, GROUP_LABELS } from '../types.ts';
-import { GroupBadge } from './GroupBadge.tsx';
+import { Player, GroupType, Basket } from '../types.ts';
 
 interface EditPlayerModalProps {
   isOpen: boolean;
   player: Player | null;
+  baskets: Basket[];
   onClose: () => void;
   onSave: (updated: Player) => void;
 }
@@ -13,6 +13,7 @@ interface EditPlayerModalProps {
 export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
   isOpen,
   player,
+  baskets,
   onClose,
   onSave,
 }) => {
@@ -41,8 +42,6 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
     onClose();
   };
 
-  const groups: GroupType[] = ['A', 'B', 'N'];
-
   return (
     <div
       className="fixed inset-0 bg-[#0e1624]/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 transition-opacity"
@@ -52,7 +51,6 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
         className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-[#e3e0d8] overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="px-5 py-4 border-b border-[#e3e0d8] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <User className="w-4 h-4 text-[#c9a44c]" />
@@ -69,9 +67,7 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-5 space-y-4">
-          {/* Name input */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-[#5b6676] block">
               Tên người chơi
@@ -85,37 +81,36 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
             />
           </div>
 
-          {/* Group selector */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-[#5b6676] block">
               Rổ thăm (Trình độ)
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {groups.map((g) => {
-                const isSelected = group === g;
+            <div className="flex flex-wrap gap-2">
+              {baskets.map((b) => {
+                const isSelected = group === b.id;
                 return (
                   <button
-                    key={g}
+                    key={b.id}
                     type="button"
-                    onClick={() => setGroup(g)}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                    onClick={() => setGroup(b.id)}
+                    style={
                       isSelected
-                        ? g === 'A'
-                          ? 'bg-[#1f3a5f] text-white border-[#1f3a5f] shadow-xs'
-                          : g === 'B'
-                          ? 'bg-[#3f7ab8] text-white border-[#3f7ab8] shadow-xs'
-                          : 'bg-[#c0567a] text-white border-[#c0567a] shadow-xs'
+                        ? { backgroundColor: b.color, borderColor: b.color }
+                        : undefined
+                    }
+                    className={`flex-1 min-w-[80px] py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                      isSelected
+                        ? 'text-white shadow-xs'
                         : 'border-[#e3e0d8] text-[#5b6676] hover:bg-[#f3f1ec]'
                     }`}
                   >
-                    {GROUP_LABELS[g]}
+                    {b.name}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Turns input */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-[#5b6676] block">
@@ -151,7 +146,6 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-[#e3e0d8] bg-[#faf9f6] flex gap-2">
           <button
             type="button"

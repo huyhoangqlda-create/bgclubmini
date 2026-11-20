@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, History } from 'lucide-react';
-import { HistoryMatch, Player } from '../types.ts';
+import { HistoryMatch, Player, Basket } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
+import { getBasketName } from '../utils/drawLogic.ts';
 
 interface EditHistoryModalProps {
   isOpen: boolean;
   match: HistoryMatch | null;
   players: Player[];
+  baskets: Basket[];
   onClose: () => void;
   onSave: (updated: HistoryMatch) => void;
 }
@@ -15,6 +17,7 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
   isOpen,
   match,
   players,
+  baskets,
   onClose,
   onSave,
 }) => {
@@ -65,7 +68,7 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
       <div className="space-y-1">
         <label className="text-[11px] font-bold text-[#5b6676] block">{label}</label>
         <div className="flex items-center gap-1.5">
-          {p && <GroupBadge g={p.g} />}
+          {p && <GroupBadge g={p.g} baskets={baskets} />}
           <select
             value={val}
             onChange={(e) => onChange(Number(e.target.value))}
@@ -73,7 +76,7 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
           >
             {players.map((pl) => (
               <option key={pl.id} value={pl.id}>
-                [{pl.g === 'N' ? 'Nữ' : pl.g}] {pl.name}
+                [{getBasketName(baskets, pl.g)}] {pl.name}
               </option>
             ))}
           </select>
@@ -91,7 +94,6 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
         className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-[#e3e0d8] overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="px-5 py-4 border-b border-[#e3e0d8] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-[#c9a44c]" />
@@ -108,9 +110,7 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          {/* Scores */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-[#5b6676] block">
               Tỉ số trận đấu
@@ -138,7 +138,6 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
             </div>
           </div>
 
-          {/* Players */}
           <div className="space-y-3 pt-2">
             <span className="font-extrabold text-xs uppercase tracking-wider text-[#14233a] block">
               Đội 1
@@ -164,7 +163,6 @@ export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-[#e3e0d8] bg-[#faf9f6] flex gap-2">
           <button
             type="button"

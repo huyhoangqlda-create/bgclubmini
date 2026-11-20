@@ -1,11 +1,12 @@
 import React from 'react';
 import { History as HistoryIcon, Trash2, Edit2 } from 'lucide-react';
-import { HistoryMatch, Player } from '../types.ts';
+import { HistoryMatch, Player, Basket } from '../types.ts';
 import { GroupBadge } from './GroupBadge.tsx';
 
 interface HistoryTabProps {
   history: HistoryMatch[];
   players: Player[];
+  baskets: Basket[];
   onDeleteMatch: (id: number) => void;
   onEditMatch: (match: HistoryMatch) => void;
 }
@@ -13,6 +14,7 @@ interface HistoryTabProps {
 export const HistoryTab: React.FC<HistoryTabProps> = ({
   history,
   players,
+  baskets,
   onDeleteMatch,
   onEditMatch,
 }) => {
@@ -30,11 +32,11 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
     return (
       <div className={`space-y-1 ${isWinner ? 'font-extrabold text-[#14233a]' : 'text-[#5b6676]'}`}>
         <div className="flex items-center gap-1.5 min-w-0">
-          {p1 && <GroupBadge g={p1.g} className="text-[10px] min-w-4 h-4" />}
+          {p1 && <GroupBadge g={p1.g} baskets={baskets} className="text-[10px] min-w-4 h-4" />}
           <span className="truncate text-xs sm:text-sm">{p1?.name || '(Đã xóa)'}</span>
         </div>
         <div className="flex items-center gap-1.5 min-w-0">
-          {p2 && <GroupBadge g={p2.g} className="text-[10px] min-w-4 h-4" />}
+          {p2 && <GroupBadge g={p2.g} baskets={baskets} className="text-[10px] min-w-4 h-4" />}
           <span className="truncate text-xs sm:text-sm">{p2?.name || '(Đã xóa)'}</span>
         </div>
       </div>
@@ -53,7 +55,6 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
     );
   }
 
-  // List in reverse order (latest first)
   const reversed = history.map((h, originalIndex) => ({ h, originalIndex })).reverse();
 
   return (
@@ -73,7 +74,6 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               key={h.id}
               className="bg-white rounded-2xl p-3.5 shadow-xs border border-[#e3e0d8] space-y-2.5 hover:border-[#c9a44c]/50 transition-colors"
             >
-              {/* Meta header */}
               <div className="flex items-center justify-between text-xs text-[#5b6676]">
                 <span className="font-medium">
                   Trận {originalIndex + 1} · Sân {h.court + 1} · {formatTime(h.at)} – {formatTime(h.end)}
@@ -100,12 +100,9 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                 </div>
               </div>
 
-              {/* Matchup & Score */}
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 pt-1">
-                {/* Team 1 */}
                 <div className="min-w-0">{renderTeam(h.t1, isW1)}</div>
 
-                {/* Score */}
                 <div className="font-extrabold text-base sm:text-lg font-mono tabular-nums px-2 py-1 rounded-lg bg-[#f7f6f2] flex items-center gap-1.5 shrink-0">
                   <span className={isW1 ? 'text-[#14233a] font-black' : 'text-[#5b6676]'}>
                     {h.s1}
@@ -116,7 +113,6 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                   </span>
                 </div>
 
-                {/* Team 2 */}
                 <div className="min-w-0 text-right">
                   <div className={`space-y-1 ${!isW1 ? 'font-extrabold text-[#14233a]' : 'text-[#5b6676]'}`}>
                     <div className="flex items-center justify-end gap-1.5 min-w-0">
@@ -124,7 +120,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                         {getPlayer(h.t2[0])?.name || '(Đã xóa)'}
                       </span>
                       {getPlayer(h.t2[0]) && (
-                        <GroupBadge g={getPlayer(h.t2[0])!.g} className="text-[10px] min-w-4 h-4" />
+                        <GroupBadge g={getPlayer(h.t2[0])!.g} baskets={baskets} className="text-[10px] min-w-4 h-4" />
                       )}
                     </div>
                     <div className="flex items-center justify-end gap-1.5 min-w-0">
@@ -132,7 +128,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                         {getPlayer(h.t2[1])?.name || '(Đã xóa)'}
                       </span>
                       {getPlayer(h.t2[1]) && (
-                        <GroupBadge g={getPlayer(h.t2[1])!.g} className="text-[10px] min-w-4 h-4" />
+                        <GroupBadge g={getPlayer(h.t2[1])!.g} baskets={baskets} className="text-[10px] min-w-4 h-4" />
                       )}
                     </div>
                   </div>

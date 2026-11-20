@@ -1,6 +1,35 @@
-import { Player, ActiveMatch, HistoryMatch, GROUP_ORDER } from '../types.ts';
+import { Player, ActiveMatch, HistoryMatch, Basket } from '../types.ts';
 
 export const pk = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`);
+
+export const getPairKey = (g1: string, g2: string): string =>
+  g1 < g2 ? `${g1}|${g2}` : `${g2}|${g1}`;
+
+export function getAllPossiblePairs(
+  baskets: Basket[]
+): { key: string; b1: Basket; b2: Basket }[] {
+  const list: { key: string; b1: Basket; b2: Basket }[] = [];
+  for (let i = 0; i < baskets.length; i++) {
+    for (let j = i; j < baskets.length; j++) {
+      const b1 = baskets[i];
+      const b2 = baskets[j];
+      list.push({
+        key: getPairKey(b1.id, b2.id),
+        b1,
+        b2,
+      });
+    }
+  }
+  return list;
+}
+
+export function getBasketById(baskets: Basket[], id: string): Basket | undefined {
+  return baskets.find((b) => b.id === id);
+}
+
+export function getBasketName(baskets: Basket[], id: string): string {
+  return getBasketById(baskets, id)?.name || id;
+}
 
 export function getBusySet(active: Record<number, ActiveMatch>): Set<number> {
   const set = new Set<number>();
@@ -26,36 +55,40 @@ export function getMinTurns(players: Player[], excludeId?: number): number {
 }
 
 /**
- * Quy tắc ghép cặp đôi theo yêu cầu:
- * - Nam A với Nữ (A + N)
- * - Nam B với Nữ (B + N)
- * - Nữ với Nữ (N + N)
+ * Kiểm tra đội hợp lệ dựa theo danh sách cặp hợp lệ được cấu hình trong Cài đặt
  */
-export function isValidTeam(t: [Player, Player]): boolean {
-  const a = t[0].g;
-  const b = t[1].g;
-  return (
-    (a === 'A' && b === 'N') ||
-    (a === 'N' && b === 'A') ||
-    (a === 'B' && b === 'N') ||
-    (a === 'N' && b === 'B') ||
-    (a === 'N' && b === 'N')
-  );
+export function isValidTeam(t: [Player, Player], validPairs: string[]): boolean {
+  const key = getPairKey(t[0].g, t[1].g);
+  return validPairs.includes(key);
 }
 
-export const hasFemale = (t: [Player, Player]): boolean => t[0].g === 'N' || t[1].g === 'N';
+export function getTeamCategory(
+  t: [Player, Player],
+  baskets: Basket[]
+): 'MM' | 'MF' | 'FF' {
+  const g1 = getBasketById(baskets, t[0].g)?.gender ?? (t[0].g === 'N' ? 'female' : 'male');
+  const g2 = getBasketById(baskets, t[1].g)?.gender ?? (t[1].g === 'N' ? 'female' : 'male');
+  if (g1 === 'male' && g2 === 'male') return 'MM';
+  if (g1 === 'female' && g2 === 'female') return 'FF';
+  return 'MF';
+}
 
-export function getTeamTypeLabel(p1?: Player, p2?: Player): string {
+export function getTeamTypeLabel(
+  p1: Player | undefined,
+  p2: Player | undefined,
+  baskets: Basket[]
+): string {
   if (!p1 || !p2) return 'Chưa đủ người';
-  const a = p1.g;
-  const b = p2.g;
-  if ((a === 'A' && b === 'N') || (a === 'N' && b === 'A')) return 'Nam A + Nữ';
-  if ((a === 'B' && b === 'N') || (a === 'N' && b === 'B')) return 'Nam B + Nữ';
-  if (a === 'N' && b === 'N') return 'Nữ + Nữ';
-  if ((a === 'A' && b === 'B') || (a === 'B' && b === 'A')) return 'Nam A + B';
-  if (a === 'A' && b === 'A') return 'Nam A + A';
-  if (a === 'B' && b === 'B') return 'Nam B + B';
-  return `${a} + ${b}`;
+  const b1 = getBasketById(baskets, p1.g);
+  const b2 = getBasketById(baskets, p2.g);
+  const n1 = b1?.name || p1.g;
+  const n2 = b2?.name || p2.g;
+  const idx1 = baskets.findIndex((b) => b.id === p1.g);
+  const idx2 = baskets.findIndex((b) => b.id === p2.g);
+  if (idx1 !== -1 && idx2 !== -1 && idx1 > idx2) {
+    return `${n2} + ${n1}`;
+  }
+  return `${n1} + ${n2}`;
 }
 
 export function getPairStats(history: HistoryMatch[], active: Record<number, ActiveMatch>) {
@@ -81,7 +114,7 @@ export function getPairStats(history: HistoryMatch[], active: Record<number, Act
   return { part, opp };
 }
 
-const SPLITS: [ [number, number], [number, number] ][] = [
+const SPLITS: [[number, number], [number, number]][] = [
   [[0, 1], [2, 3]],
   [[0, 2], [1, 3]],
   [[0, 3], [1, 2]],
@@ -98,18 +131,24 @@ export interface FindMatchResult {
  * - Chỉ tính những người đang chờ (idle players).
  * - Không tính thời gian chờ (không dùng p.last).
  * - Ưu tiên người có số lượt đã đánh (p.turns) ít nhất, bốc ngẫu nhiên công bằng giữa những người cùng số lượt.
- * - Đảm bảo mỗi cặp là Nam A + Nữ, Nam B + Nữ hoặc Nữ + Nữ.
+ * - Kiểm tra cặp hợp lệ theo danh sách `validPairs` từ Cài đặt.
  */
 export function findMatch(
   players: Player[],
   active: Record<number, ActiveMatch>,
   history: HistoryMatch[],
-  sameType: boolean
+  sameType: boolean,
+  baskets: Basket[],
+  validPairs: string[]
 ): FindMatchResult {
+  if (!validPairs.length) {
+    return { err: 'Chưa có cặp hợp lệ nào được bật. Hãy vào Cài đặt để chọn ít nhất 1 cặp hợp lệ.' };
+  }
+
   // Chỉ tính những người đang chờ (không bận trên sân)
   const idle = getIdlePlayers(players, active);
 
-  // Chỉ sắp xếp theo số lượt đã đánh (turns) và ngẫu nhiên (r). KHÔNG tính thời gian chờ (bỏ p.last).
+  // Chỉ sắp xếp theo số lượt đã đánh (turns) và ngẫu nhiên (r). KHÔNG tính thời gian chờ.
   const sorted = idle
     .map((p) => ({ p, r: Math.random() }))
     .sort((x, y) => x.p.turns - y.p.turns || x.r - y.r)
@@ -140,16 +179,17 @@ export function findMatch(
           for (const s of SPLITS) {
             const a: [Player, Player] = [four[s[0][0]], four[s[0][1]]];
             const b: [Player, Player] = [four[s[1][0]], four[s[1][1]]];
-            if (isValidTeam(a) && isValidTeam(b)) {
+            if (isValidTeam(a, validPairs) && isValidTeam(b, validPairs)) {
               valid.push([a, b]);
             }
           }
 
           if (!valid.length) continue;
 
-          // Cùng loại đối đầu (Đôi Nữ vs Đôi Nữ, hoặc Đôi Nam Nữ vs Đôi Nam Nữ)
-          const isFemalePair = (t: [Player, Player]) => t[0].g === 'N' && t[1].g === 'N';
-          const same = valid.filter(([a, b]) => isFemalePair(a) === isFemalePair(b));
+          // Cùng loại đối đầu (Đôi Nam vs Đôi Nam, Đôi Nam Nữ vs Đôi Nam Nữ, Đôi Nữ vs Đôi Nữ)
+          const same = valid.filter(
+            ([a, b]) => getTeamCategory(a, baskets) === getTeamCategory(b, baskets)
+          );
           const cross = sameType && !same.length ? 1 : 0;
           const sumT = four[0].turns + four[1].turns + four[2].turns + four[3].turns;
           const rc = 2 ** i + 2 ** j + 2 ** k + 2 ** l;
@@ -172,10 +212,14 @@ export function findMatch(
   }
 
   if (!best || !best.splits.length) {
-    const counts = { A: 0, B: 0, N: 0 };
-    sorted.forEach((p) => counts[p.g]++);
+    const countsSummary = baskets
+      .map((b) => {
+        const cnt = sorted.filter((p) => p.g === b.id).length;
+        return `${cnt} ${b.name}`;
+      })
+      .join(', ');
     return {
-      err: `Người đang chờ không ghép được trận hợp lệ (hiện có: ${counts.A} Nam A, ${counts.B} Nam B, ${counts.N} Nữ). Mỗi cặp phải là: Nam A + Nữ, Nam B + Nữ, hoặc Nữ + Nữ. Cần có đủ người chơi Nữ để ghép cặp.`,
+      err: `Người đang chờ không ghép được trận hợp lệ theo cài đặt hiện tại (đang chờ: ${countsSummary}). Bạn có thể điều chỉnh "Cặp hợp lệ" trong Cài đặt hoặc bấm Ghép thủ công.`,
     };
   }
 
@@ -202,13 +246,17 @@ export function findMatch(
     pick = best.splits[0];
   }
 
-  // Randomize sides
   if (Math.random() < 0.5) {
     pick.reverse();
   }
 
+  const basketOrder = (id: string) => {
+    const idx = baskets.findIndex((b) => b.id === id);
+    return idx === -1 ? 999 : idx;
+  };
+
   const sortTeam = (t: [Player, Player]): [number, number] => {
-    const cloned = [...t].sort((x, y) => GROUP_ORDER[x.g] - GROUP_ORDER[y.g]);
+    const cloned = [...t].sort((x, y) => basketOrder(x.g) - basketOrder(y.g));
     return [cloned[0].id, cloned[1].id];
   };
 
